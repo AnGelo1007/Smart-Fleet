@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Assigned Trips</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </header>
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html" class="active">Trips</a>
+      <a href="reports.html">Reports</a>
+    </nav>
+    <section class="content">
+      <h2>Assigned Trips</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Trip ID</th><th>Date</th><th>Route</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tripList"></tbody>
+      </table>
+
+      <h2>Maintenance Logs</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Vehicle</th><th>Date</th><th>Description</th>
+          </tr>
+        </thead>
+        <tbody id="mntList"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    // Firebase init
+    const cfg = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(cfg);
+    const auth = firebase.auth(), db = firebase.database();
+
+    // Protect page
+    auth.onAuthStateChanged(u => {
+      if (!u) return location = '../index.html';
+      db.ref('users/' + u.uid).get().then(snap => {
+        if (snap.val().role !== 'driver') location = '../index.html';
+      });
+    });
+
+    function logout() {
+      auth.signOut().then(()=> location = '../index.html');
+    }
+
+    // Load assigned trips for this driver
+    db.ref('trips').orderByChild('driver').equalTo(auth.currentUser?.uid).on('value', snap => {
+      let out = '';
+      snap.forEach(c => {
+        const t = c.val(), id = c.key;
+        out += `<tr>
+          <td>${id}</td>
+          <td>${t.date}</td>
+          <td>${t.vehicle}</td>
+          <td>${t.status}</td>
+        </tr>`;
+      });
+      document.getElementById('tripList').innerHTML = out;
+    });
+
+    // Load maintenance logs (all, or filter if you track per-driver)
+    db.ref('maintenance').on('value', snap => {
+      let out = '';
+      snap.forEach(c => {
+        const m = c.val();
+        out += `<tr>
+          <td>${m.vehicle}</td>
+          <td>${m.date}</td>
+          <td>${m.desc}</td>
+        </tr>`;
+      });
+      document.getElementById('mntList').innerHTML = out;
+    });
+  </script>
+</body>
+</html>
