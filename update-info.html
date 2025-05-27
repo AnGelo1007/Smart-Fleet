@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Update User Info</title>
+  <link rel="stylesheet" href="../styles.css">
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </header>
+
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html">Assign Trips</a>
+      <a href="manage.html">Manage Users</a>
+      <a href="maintenance.html">Maintenance</a>
+      <a href="update-info.html" class="active">Update User Info</a>
+    </nav>
+
+    <section class="content">
+      <div class="search-bar">
+        <input type="text" placeholder="Search">
+        <button>🔍</button>
+      </div>
+
+      <h2>User Information</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Username</th><th>Gmail</th>
+            <th>Contact No.</th><th>Role</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="infoTable"></tbody>
+      </table>
+
+      <h2>Update Information</h2>
+      <form class="form-grid" onsubmit="updateInfo(); return false;">
+        <!-- UID is now readonly -->
+        <label for="fid">ID</label>
+        <input id="fid" readonly>
+
+        <label for="fname">Name</label>
+        <input id="fname" required>
+
+        <label for="funame">Username</label>
+        <input id="funame" required>
+
+        <label for="femail">Gmail</label>
+        <input id="femail" type="email" required>
+
+        <label for="fcontact">Contact No.</label>
+        <input id="fcontact" required pattern="^09[0-9]{9}$"
+               title="Enter a valid Philippine mobile number (e.g., 09171234567)">
+
+        <label for="frole">Role</label>
+        <select id="frole">
+          <option value="admin">Admin</option>
+          <option value="driver">Driver</option>
+        </select>
+
+        <label for="fstatus">Status</label>
+        <select id="fstatus">
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+
+        <div class="form-footer">
+          <button class="primary">Submit</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+
+  <script>
+    // Firebase init
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth(), db = firebase.database();
+
+    // —————————————————————————————————————————
+    // Auth guard + logout (unchanged)
+    auth.onAuthStateChanged(u => {
+      if (!u) return location = '../index.html';
+      db.ref('users/' + u.uid).get().then(snap => {
+        if (!snap.exists() || snap.val().role !== 'admin') {
+          auth.signOut().then(() => location = '../index.html');
+        }
+      });
+    });
+    function logout() {
+      auth.signOut().then(() => location = '../index.html');
+    }
+
+    // —————————————————————————————————————————
+    // Search/filter helpers
+    const searchInput = document.querySelector('.search-bar input');
+    const tbody       = document.getElementById('infoTable');
+
+    // Reusable filter function
+    function applyFilter() {
+      const q = searchInput.value.trim().toLowerCase();
+      Array.from(tbody.rows).forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    }
+    // Run filter on every keystroke
+    searchInput.addEventListener('input', applyFilter);
+
+    // —————————————————————————————————————————
+    // Table population + Edit form (unchanged except for calling applyFilter)
+    let userData = {};
+    db.ref('users').on('value', snap => {
+      tbody.innerHTML = '';
+      userData = {};
+
+      snap.forEach(child => {
+        const id = child.key;
+        const u  = child.val();
+        userData[id] = u;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${id}</td>
+          <td>${u.name||''}</td>
+          <td>${u.username||''}</td>
+          <td>${u.email||''}</td>
+          <td>${u.contact||''}</td>
+          <td>${u.role||''}</td>
+          <td>${u.status||'Active'}</td>
+          <td><button class="text-btn" onclick="fillForm('${id}')">Edit</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      // Immediately re-apply the filter after re-populating
+      applyFilter();
+    });
+
+    function fillForm(id) {
+      const u = userData[id];
+      document.getElementById('fid').value      = id;
+      document.getElementById('fname').value    = u.name  || '';
+      document.getElementById('funame').value   = u.username || '';
+      document.getElementById('femail').value   = u.email || '';
+      document.getElementById('fcontact').value = u.contact || '';
+      document.getElementById('frole').value    = u.role  || '';
+      document.getElementById('fstatus').value  = u.status|| 'Active';
+    }
+
+    function updateInfo() {
+      const id = document.getElementById('fid').value;
+      if (!id) return alert('Please select a user to edit first.');
+
+      const data = {
+        name:     document.getElementById('fname').value.trim(),
+        username: document.getElementById('funame').value.trim(),
+        email:    document.getElementById('femail').value.trim(),
+        contact:  document.getElementById('fcontact').value.trim(),
+        role:     document.getElementById('frole').value,
+        status:   document.getElementById('fstatus').value
+      };
+
+      db.ref('users/' + id).update(data)
+        .then(() => { alert('User info updated.'); applyFilter(); })
+        .catch(e => alert(e.message));
+    }
+  </script>
+</body>
+</html>

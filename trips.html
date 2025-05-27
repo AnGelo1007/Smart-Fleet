@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Assign Trips</title>
+  <link rel="stylesheet" href="../styles.css">
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </header>
+
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html" class="active">Assign Trips</a>
+      <a href="manage.html">Manage Users</a>
+      <a href="maintenance.html">Maintenance</a>
+      <a href="update-info.html">Update User Info</a>
+    </nav>
+
+    <section class="content">
+      <div class="search-bar">
+        <input id="tripSearch" type="text" placeholder="Search">
+        <button>🔍</button>
+      </div>
+
+      <h2>Assign Trip</h2>
+      <form class="form-grid" onsubmit="assignTrip(); return false;">
+        <!-- DRIVER (autocomplete) -->
+        <label for="driver">Driver</label>
+        <input
+          id="driver"
+          list="driverList"
+          placeholder="Start typing a driver’s name..."
+          required
+        >
+        <datalist id="driverList"></datalist>
+
+        <!-- TRIP DATE -->
+        <label for="tripDate">Trip Date</label>
+        <input id="tripDate" type="date" required>
+
+        <!-- VEHICLE / ROUTE free text -->
+        <label for="vehicle">Vehicle / Route</label>
+        <input id="vehicle" placeholder="Enter vehicle or route" required>
+
+        <div class="form-footer">
+          <button class="primary">Assign</button>
+        </div>
+      </form>
+
+      <h2>Trips</h2>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Driver</th><th>Date</th><th>Route</th><th>Status</th><th>Action</th></tr>
+        </thead>
+        <tbody id="tripList"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    // — Firebase init
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth(), db = firebase.database();
+
+    // — Auth guard
+    auth.onAuthStateChanged(u => {
+      if (!u) return location = '../index.html';
+      db.ref('users/' + u.uid).get().then(snap => {
+        if (snap.val().role !== 'admin') location = '../index.html';
+      });
+    });
+    function logout() {
+      auth.signOut().then(() => location = '../index.html');
+    }
+
+    // — Populate drivers autocomplete
+    db.ref('users').orderByChild('role').equalTo('driver')
+      .on('value', snap => {
+        const list = document.getElementById('driverList');
+        list.innerHTML = '';
+        snap.forEach(child => {
+          const u = child.val();
+          const opt = document.createElement('option');
+          // show their display name (or username if you prefer)
+          opt.value = u.name;
+          list.appendChild(opt);
+        });
+      });
+
+    // — Load trips table
+    db.ref('trips').on('value', snap => {
+      let html = '';
+      snap.forEach(c => {
+        const t = c.val(), id = c.key;
+        html += `
+          <tr>
+            <td>${id}</td>
+            <td>${t.driver}</td>
+            <td>${t.date}</td>
+            <td>${t.vehicle}</td>
+            <td>${t.status}</td>
+            <td><a href="#" onclick="removeTrip('${id}')">Remove</a></td>
+          </tr>`;
+      });
+      document.getElementById('tripList').innerHTML = html;
+    });
+
+    // — Assign a new trip
+    function assignTrip() {
+      const driver  = document.getElementById('driver').value.trim();
+      const date    = document.getElementById('tripDate').value;
+      const vehicle = document.getElementById('vehicle').value.trim();
+      if (!driver || !date || !vehicle) {
+        return alert('Please fill out all fields.');
+      }
+      db.ref('trips').push({
+        driver,
+        date,
+        vehicle,
+        status: 'Assigned'
+      });
+      alert('Trip assigned');
+      // clear the form
+      document.getElementById('driver').value = '';
+      document.getElementById('tripDate').value = '';
+      document.getElementById('vehicle').value = '';
+    }
+
+    // — Remove a trip
+    function removeTrip(id) {
+      db.ref('trips/' + id).remove();
+    }
+
+    // — Live search filter
+    document.getElementById('tripSearch')
+      .addEventListener('input', e => {
+        const q = e.target.value.toLowerCase();
+        document.querySelectorAll('#tripList tr').forEach(tr => {
+          tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+      });
+  </script>
+</body>
+</html>

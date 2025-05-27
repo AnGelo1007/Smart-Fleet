@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Manage Users</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </header>
+
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html">Assign Trips</a>
+      <a href="manage.html" class="active">Manage Users</a>
+      <a href="maintenance.html">Maintenance</a>
+      <a href="update-info.html">Update User Info</a>
+    </nav>
+
+    <section class="content">
+      <div class="search-bar">
+        <input id="manageSearch" type="text" placeholder="Search">
+        <button>🔍</button>
+      </div>
+
+      <h2>Manage Users</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Username</th>
+            <th>Gmail</th><th>Contact No.</th><th>Role</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="userTable"></tbody>
+      </table>
+
+      <h2>Users Access</h2>
+      <form class="form-grid" onsubmit="grantAccess();return false;">
+        <label for="uID">ID</label><input id="uID">
+        <label for="uName">Username</label><input id="uName">
+        <label for="uRole">Role</label><input id="uRole">
+        <div class="form-footer">
+          <button class="primary">Submit</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    // Firebase init
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth(), db = firebase.database();
+
+    // Auth + guard
+    auth.onAuthStateChanged(u => {
+      if (!u) return location = '../index.html';
+      db.ref('users/'+u.uid).get().then(snap => {
+        if (snap.val().role !== 'admin') location = '../index.html';
+      });
+    });
+    function logout() { auth.signOut().then(()=>location='../index.html'); }
+
+    // Load all users
+    db.ref('users').on('value', snap => {
+      let html = '';
+      snap.forEach(c => {
+        const u = c.val(), id = c.key;
+        html += `
+          <tr>
+            <td>${id}</td>
+            <td>${u.name}</td>
+            <td>${u.username||''}</td>
+            <td>${u.email}</td>
+            <td>${u.contact||''}</td>
+            <td>${u.role}</td>
+            <td>${u.status||'Active'}</td>
+            <td><a href="#" onclick="removeUser('${id}')">Remove</a></td>
+          </tr>`;
+      });
+      document.getElementById('userTable').innerHTML = html;
+    });
+    function removeUser(id) {
+      db.ref('users/'+id).remove();
+    }
+    function grantAccess() {
+      const id   = document.getElementById('uID').value;
+      const role = document.getElementById('uRole').value;
+      if (!id||!role) return alert('ID & Role required');
+      db.ref('users/'+id).update({role})
+        .then(()=>alert('Access updated'));
+    }
+
+    // Live search filter
+    document.getElementById('manageSearch').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      document.querySelectorAll('#userTable tr').forEach(tr => {
+        tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  </script>
+</body>
+</html>

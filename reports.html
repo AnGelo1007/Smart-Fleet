@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reports</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </header>
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html">Trips</a>
+      <a href="reports.html" class="active">Reports</a>
+    </nav>
+    <section class="content">
+      <h2>Submit Report</h2>
+      <form class="form-grid" onsubmit="submitReport(); return false;">
+        <label>ISSUE TYPE:</label>
+        <select id="issueType">
+          <option value="Mechanical">MECHANICAL</option>
+          <option value="Electrical">ELECTRICAL</option>
+          <option value="Other">OTHER</option>
+        </select>
+
+        <label>Description</label>
+        <textarea id="description" rows="8" placeholder="Describe the issue..."></textarea>
+
+        <div class="form-footer">
+          <button class="primary">Submit</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    // Firebase init
+    const cfg = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(cfg);
+    const auth = firebase.auth(), db = firebase.database();
+
+    auth.onAuthStateChanged(u => {
+      if (!u) return location = '../index.html';
+      db.ref('users/' + u.uid).get().then(snap => {
+        if (snap.val().role !== 'driver') location = '../index.html';
+      });
+    });
+
+    function logout() {
+      auth.signOut().then(()=> location = '../index.html');
+    }
+
+    function submitReport() {
+      const type = document.getElementById('issueType').value;
+      const desc = document.getElementById('description').value;
+      db.ref('reports').push({
+        submittedBy: auth.currentUser.uid,
+        type,
+        description: desc,
+        date: new Date().toISOString()
+      });
+      alert('Report submitted');
+      // Clear form
+      document.getElementById('description').value = '';
+    }
+  </script>
+</body>
+</html>
