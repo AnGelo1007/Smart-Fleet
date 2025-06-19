@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Maintenance</title>
+  <link rel="stylesheet" href="../styles.css">
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <style>
+    .hidden { display: none !important; }
+    #loadingOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.8);
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #2684f3;
+      user-select: none;
+    }
+    .modal.assign-modal {
+      width: 420px;
+      max-width: 97%;
+      padding: 2.2rem 1.7rem 1.5rem 1.7rem;
+      background: linear-gradient(135deg, #957DAD 0%, #2684f3 100%);
+      border-radius: 30px;
+      box-shadow: 0 6px 32px rgba(38,132,243,0.18), 0 1px 12px #7E57C2;
+      color: #fff;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      animation: modalIn 0.25s;
+      border: 2px solid #7E57C2;
+      z-index: 300;
+    }
+    @keyframes modalIn {
+      0% { transform: scale(0.93); opacity:0 }
+      100% { transform: scale(1); opacity:1 }
+    }
+  </style>
+</head>
+<body>
+  <div id="loadingOverlay">Loading...</div>
+
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <div class="header-buttons">
+      <button class="dashboard-btn" onclick="goToDashboard()">Go to Dashboard</button>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html" id="navTrips">Assign Trips</a>
+      <a href="manage.html" id="navManage">Manage Vehicles &amp; Routes</a>
+      <a href="maintenance.html" class="active" id="navMaintenance">Maintenance</a>
+      <a href="update-info.html" id="navUpdate">Update User Info</a>
+    </nav>
+
+    <section class="content" id="contentSection">
+      <div class="search-bar">
+        <input id="mntSearch" type="text" placeholder="Search maintenance…">
+        <button onclick="filterMaintenance()">🔍</button>
+      </div>
+
+      <h2>Maintenance Log</h2>
+      <div class="table-container" id="mntTableContainer">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Name</th><th>Vehicle</th>
+              <th>Type</th><th>Description</th><th>Status</th><th>Date</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="mntList"></tbody>
+        </table>
+      </div>
+
+      <h2>Driver Report Table</h2>
+      <div class="table-container" id="driverReportContainer">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Driver Name</th><th>Vehicle</th>
+              <th>Description</th><th>Mileage From</th><th>Mileage To</th>
+              <th>Status</th><th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="driverReportList"></tbody>
+        </table>
+      </div>
+
+      <!-- ASSIGN MODAL -->
+      <div class="modal-bg" id="assignModalBg">
+        <div class="modal assign-modal">
+          <button class="close-btn" onclick="closeAssignModal()">×</button>
+          <form id="assignModalForm" onsubmit="submitAssignModal(event)">
+            <h3>Assign to Maintenance</h3>
+            <input type="hidden" id="modalReportId">
+
+            <label for="modalVehicle">Vehicle</label>
+            <input id="modalVehicle" readonly>
+
+            <label for="modalTechnician">Assign To (Technician)</label>
+            <select id="modalTechnician" required>
+              <option value="" disabled selected>Select technician</option>
+            </select>
+
+            <label for="modalType">Type</label>
+            <select id="modalType" required>
+              <option>Oil Change</option>
+              <option>Tire Rotation</option>
+              <option>Brake Inspection</option>
+              <option>Engine Diagnostic</option>
+              <option>Transmission Service</option>
+              <option>Battery Check</option>
+              <option>Fluid Top-up</option>
+              <option>Filter Replacement</option>
+              <option>Wheel Alignment</option>
+              <option>Safety Inspection</option>
+              <option>Electrical System Check</option>
+              <option>Air Conditioning Service</option>
+              <option>Cleaning & Detailing</option>
+              <option>Driver Report</option>
+            </select>
+
+            <label for="modalStatus">Status</label>
+            <select id="modalStatus" required>
+              <option>Assigned</option>
+              <option>Pending</option>
+              <option>Scheduled</option>
+              <option>In Progress</option>
+              <option>Completed</option>
+              <option>Cancelled</option>
+            </select>
+
+            <label for="modalDesc">Description</label>
+            <textarea id="modalDesc" rows="3"></textarea>
+
+            <div class="modal-footer">
+              <button type="button" class="text-btn" onclick="closeAssignModal()">Cancel</button>
+              <button type="submit" class="primary">Assign</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Assign Maintenance Form -->
+      <h2 id="mntFormTitle">Assign Maintenance</h2>
+      <form class="form-grid" onsubmit="onMaintenanceFormSubmit(); return false;">
+        <input type="hidden" id="mntId">
+
+        <label for="muser">Technician</label>
+        <select id="muser" required>
+          <option value="" disabled selected>Select technician</option>
+        </select>
+
+        <label for="mveh">Vehicle</label>
+        <input list="vehList" id="mveh" placeholder="Select a vehicle…" required>
+        <datalist id="vehList"></datalist>
+
+        <label for="mtype">Type</label>
+        <select id="mtype">
+          <option>Oil Change</option>
+          <option>Tire Rotation</option>
+          <option>Brake Inspection</option>
+          <option>Engine Diagnostic</option>
+          <option>Transmission Service</option>
+          <option>Battery Check</option>
+          <option>Fluid Top-up</option>
+          <option>Filter Replacement</option>
+          <option>Wheel Alignment</option>
+          <option>Safety Inspection</option>
+          <option>Electrical System Check</option>
+          <option>Air Conditioning Service</option>
+          <option>Cleaning & Detailing</option>
+          <option>Driver Report</option>
+        </select>
+
+        <label for="mdesc">Description</label>
+        <input id="mdesc" placeholder="Describe the maintenance…" required>
+
+        <label for="mstatus">Status</label>
+        <select id="mstatus">
+          <option>Assigned</option>
+          <option>Pending</option>
+          <option>Scheduled</option>
+          <option>In Progress</option>
+          <option>Completed</option>
+          <option>Cancelled</option>
+        </select>
+
+        <label for="mdate">Date</label>
+        <input id="mdate" type="date" required>
+
+        <div class="form-footer">
+          <button class="primary" id="mntFormBtn">Submit</button>
+          <button type="button" class="text-btn" id="mntCancelBtn" onclick="resetMntForm()" style="display:none;">Cancel</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+    authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+    databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+    projectId: "smart-fleet-system-79d51",
+    storageBucket: "smart-fleet-system-79d51.appspot.com",
+    messagingSenderId: "803202982073",
+    appId: "1:803202982073:web:a713a86abec662f02fbb68",
+    measurementId: "G-KXXC578RJQ"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth(), db = firebase.database();
+
+  let technicians = {}; // map: name -> uid
+  let userRole = null;
+  let currentUserName = '';
+  let reportCache = {};
+
+  function logUserAction(user, action) {
+    const timestamp = new Date().toISOString();
+    db.ref('auditTrail').push({ timestamp, user, action });
+  }
+
+  // Load technicians for dropdowns
+  function loadTechnicians() {
+    db.ref('users').orderByChild('role').equalTo('technician').once('value')
+      .then(snap => {
+        technicians = {};
+        const muserSelect = document.getElementById('muser');
+        const modalTechnicianSelect = document.getElementById('modalTechnician');
+        muserSelect.innerHTML = '<option value="" disabled selected>Select technician</option>';
+        modalTechnicianSelect.innerHTML = '<option value="" disabled selected>Select technician</option>';
+        snap.forEach(child => {
+          const user = child.val();
+          const key = child.key;
+          const name = user.name || user.username || '';
+          technicians[name] = key;
+          const option1 = document.createElement('option');
+          option1.value = name;
+          option1.textContent = name;
+          muserSelect.appendChild(option1);
+          const option2 = document.createElement('option');
+          option2.value = name;
+          option2.textContent = name;
+          modalTechnicianSelect.appendChild(option2);
+        });
+      });
+  }
+
+  auth.onAuthStateChanged(async u => {
+    if (!u) return location = '../index.html';
+    const snap = await db.ref('users/' + u.uid).get();
+    const role = snap.val() && snap.val().role;
+    userRole = role;
+    if (role !== 'admin' && role !== 'maintenance') {
+      auth.signOut().then(() => location = '../index.html');
+      return;
+    }
+    currentUserName = snap.val().name || snap.val().username || 'Unknown User';
+
+    if(role === 'maintenance') {
+      logUserAction(currentUserName, 'Logged in');
+      document.getElementById('navTrips').classList.add('hidden');
+      document.getElementById('navManage').classList.add('hidden');
+      document.getElementById('navUpdate').classList.add('hidden');
+    }
+
+    loadTechnicians();
+    setupRealtimeListeners();
+    document.getElementById('loadingOverlay').style.display = 'none';
+  });
+
+  function logout() {
+    if(currentUserName && userRole === 'maintenance') {
+      logUserAction(currentUserName, 'Logged out');
+    }
+    auth.signOut().then(() => location = '../index.html');
+  }
+
+  let vehicleMap = {};
+  db.ref('vehicles').on('value', snap => {
+    const dl = document.getElementById('vehList');
+    dl.innerHTML = '';
+    vehicleMap = {};
+    snap.forEach(ch => {
+      const v = ch.val(), key = ch.key;
+      const label = `${v.vehicle} • ${v.route}`;
+      vehicleMap[label] = key;
+      if (v.status === 'Available') {
+        const opt = document.createElement('option');
+        opt.value = label;
+        dl.appendChild(opt);
+      }
+    });
+  });
+
+  function setupRealtimeListeners() {
+    // Maintenance log with real-time updates
+    db.ref('maintenance').on('value', snap => {
+      const mntList = document.getElementById('mntList');
+      let html = '';
+      snap.forEach(child => {
+        const m = child.val();
+        const id = child.key;
+        html += `
+          <tr>
+            <td>${id}</td>
+            <td>${m.username || ''}</td>
+            <td>${m.vehicle || ''}</td>
+            <td>${m.type || ''}</td>
+            <td>${m.desc || ''}</td>
+            <td>${m.status || ''}</td>
+            <td>${m.date || ''}</td>
+            <td>
+              <button class="text-btn" onclick="editMnt('${id}')">Edit</button>
+              <button class="text-btn" onclick="removeMnt('${id}')">Remove</button>
+            </td>
+          </tr>`;
+      });
+      mntList.innerHTML = html;
+      adjustTableScroll('mntTableContainer', snap.numChildren());
+    });
+
+    // Driver reports
+    db.ref('driverReports').on('value', snap => {
+      const driverReportList = document.getElementById('driverReportList');
+      let html = '', count = 0;
+      reportCache = {};
+      snap.forEach(ch => {
+        const m = ch.val(), id = ch.key;
+        reportCache[id] = m;
+        count++;
+        html += `
+          <tr style="cursor:pointer" onclick="openAssignModal('${id}')">
+            <td>${id}</td>
+            <td>${m.username || ''}</td>
+            <td>${m.vehicle || ''}</td>
+            <td>${m.desc || ''}</td>
+            <td>${m.mileageFrom || ''}</td>
+            <td>${m.mileageTo || ''}</td>
+            <td>${m.status || ''}</td>
+            <td>${m.date || ''}</td>
+          </tr>`;
+      });
+      driverReportList.innerHTML = html;
+      adjustTableScroll('driverReportContainer', count);
+    });
+  }
+
+  function adjustTableScroll(containerId, rowCount) {
+    const container = document.getElementById(containerId);
+    if (rowCount >= 5) {
+      container.style.maxHeight = '300px';
+      container.style.overflowY = 'auto';
+    } else {
+      container.style.maxHeight = 'none';
+      container.style.overflowY = 'visible';
+    }
+  }
+
+  function filterMaintenance() {
+    const q = document.getElementById('mntSearch').value.trim().toLowerCase();
+    document.querySelectorAll('#mntList tr').forEach(r => {
+      r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+  document.getElementById('mntSearch').addEventListener('input', filterMaintenance);
+
+  let editingMntId = null;
+  function onMaintenanceFormSubmit() {
+    return editingMntId ? updateMnt() : assignMnt();
+  }
+
+  function assignMnt() {
+    const username = document.getElementById('muser').value;
+    const vehicle  = document.getElementById('mveh').value.trim();
+    const type     = document.getElementById('mtype').value;
+    const desc     = document.getElementById('mdesc').value.trim();
+    const status   = document.getElementById('mstatus').value;
+    const date     = document.getElementById('mdate').value;
+
+    if (!username || !vehicle || !desc || !date) {
+      return alert('All fields are required.');
+    }
+
+    let key = vehicleMap[vehicle];
+    if (!key) {
+      const found = Object.entries(vehicleMap)
+        .find(([label]) => label.toLowerCase() === vehicle.toLowerCase());
+      key = found && found[1];
+    }
+    if (!key) {
+      return alert('That vehicle is not Available. Please select an available one.');
+    }
+
+    // Allow assignment regardless of vehicle availability
+    db.ref('maintenance').push({
+      username,
+      vehicle,
+      type,
+      desc,
+      status,
+      date
+    })
+    .then(() => {
+      if(status === "In Progress") {
+        return db.ref('vehicles/' + key).update({ status: "Unavailable" });
+      } else {
+        return Promise.resolve();
+      }
+    })
+    .then(() => {
+      logUserAction(currentUserName, `Assigned maintenance "${type}" on vehicle "${vehicle}" with status "${status}" to technician "${username}"`);
+      resetMntForm();
+      document.getElementById('mntSearch').value = '';
+      filterMaintenance();
+    })
+    .catch(e => alert(e.message));
+  }
+
+  function editMnt(id) {
+    db.ref('maintenance/' + id).get().then(snap => {
+      if (!snap.exists()) {
+        alert('Maintenance record not found');
+        return;
+      }
+      const m = snap.val();
+      document.getElementById('mntId').value = id;
+      document.getElementById('muser').value = m.username || '';
+      document.getElementById('mveh').value = m.vehicle || '';
+      document.getElementById('mtype').value = m.type || '';
+      document.getElementById('mdesc').value = m.desc || '';
+      document.getElementById('mstatus').value = m.status || '';
+      document.getElementById('mdate').value = m.date || new Date().toISOString().split('T')[0];
+      document.getElementById('mntFormTitle').textContent = 'Edit Maintenance';
+      document.getElementById('mntFormBtn').textContent = 'Save Changes';
+      document.getElementById('mntCancelBtn').style.display = 'inline-block';
+      editingMntId = id;
+    }).catch(() => {
+      alert('Maintenance record not found');
+    });
+  }
+
+  function updateMnt() {
+    const id       = document.getElementById('mntId').value;
+    const username = document.getElementById('muser').value;
+    const vehicle  = document.getElementById('mveh').value.trim();
+    const type     = document.getElementById('mtype').value;
+    const desc     = document.getElementById('mdesc').value.trim();
+    const status   = document.getElementById('mstatus').value;
+    const date     = document.getElementById('mdate').value;
+
+    if (!username || !vehicle || !desc || !date) {
+      return alert('All fields are required.');
+    }
+
+    let key = vehicleMap[vehicle];
+    if (!key) {
+      const found = Object.entries(vehicleMap)
+        .find(([label]) => label.toLowerCase() === vehicle.toLowerCase());
+      key = found && found[1];
+    }
+
+    db.ref('maintenance/' + id).update({
+      username,
+      vehicle,
+      type,
+      desc,
+      status,
+      date
+    })
+    .then(() => {
+      if(status === "In Progress" && key) {
+        return db.ref('vehicles/' + key).update({ status: "Unavailable" });
+      } else if(key) {
+        return db.ref('maintenance').orderByChild('vehicle').equalTo(vehicle).get()
+          .then(snapshot => {
+            let hasInProgress = false;
+            snapshot.forEach(child => {
+              if(child.key !== id && child.val().status === "In Progress") {
+                hasInProgress = true;
+              }
+            });
+            if(!hasInProgress) {
+              return db.ref('vehicles/' + key).update({ status: "Available" });
+            }
+          });
+      }
+    })
+    .then(() => {
+      logUserAction(currentUserName, `Updated maintenance "${type}" on vehicle "${vehicle}" with status "${status}" to technician "${username}"`);
+      resetMntForm();
+      document.getElementById('mntSearch').value = '';
+      filterMaintenance();
+    })
+    .catch(e => alert(e.message));
+  }
+
+  function resetMntForm() {
+    document.getElementById('mntId').value = '';
+    document.getElementById('muser').value = '';
+    document.getElementById('mveh').value = '';
+    document.getElementById('mtype').value = 'Oil Change';
+    document.getElementById('mdesc').value = '';
+    document.getElementById('mstatus').value = 'Assigned';
+    document.getElementById('mdate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('mntFormTitle').textContent = 'Assign Maintenance';
+    document.getElementById('mntFormBtn').textContent = 'Submit';
+    document.getElementById('mntCancelBtn').style.display = 'none';
+    editingMntId = null;
+  }
+
+  function removeMnt(id) {
+    if (!confirm("Are you sure you want to remove this maintenance record?")) return;
+    db.ref('maintenance/' + id).get().then(snap => {
+      const m = snap.val();
+      const key = vehicleMap[m.vehicle];
+      if (key) {
+        return db.ref('maintenance').orderByChild('vehicle').equalTo(m.vehicle).get()
+          .then(snapshot => {
+            let hasInProgress = false;
+            snapshot.forEach(child => {
+              if(child.key !== id && child.val().status === "In Progress") {
+                hasInProgress = true;
+              }
+            });
+            if(!hasInProgress) {
+              return db.ref('vehicles/' + key).update({ status: "Available" });
+            }
+          });
+      }
+    })
+    .then(() => db.ref('maintenance/' + id).remove())
+    .then(() => {
+      logUserAction(currentUserName, `Removed maintenance record ID: ${id}`);
+    })
+    .catch(e => alert(e.message));
+  }
+
+  let selectedDriverReportId = null;
+  function openAssignModal(id) {
+    selectedDriverReportId = id;
+    const m = reportCache[id];
+    document.getElementById('modalReportId').value = id;
+    document.getElementById('modalVehicle').value = m.vehicle || '';
+    document.getElementById('modalTechnician').value = '';
+    document.getElementById('modalType').value = 'Oil Change';
+    document.getElementById('modalStatus').value = 'Assigned';
+    document.getElementById('modalDesc').value = m.desc || '';
+    document.getElementById('assignModalBg').classList.add('active');
+  }
+  function closeAssignModal() {
+    document.getElementById('assignModalBg').classList.remove('active');
+    selectedDriverReportId = null;
+    document.getElementById('assignModalForm').reset();
+  }
+  function submitAssignModal(e) {
+    e.preventDefault();
+    if (!selectedDriverReportId) return;
+    const orig = reportCache[selectedDriverReportId];
+    const username = document.getElementById('modalTechnician').value;
+    const vehicle  = document.getElementById('modalVehicle').value;
+    const type     = document.getElementById('modalType').value;
+    const desc     = document.getElementById('modalDesc').value || orig.desc || '';
+    const status   = document.getElementById('modalStatus').value;
+    const date     = (new Date()).toISOString().split('T')[0];
+
+    if (!username) {
+      alert('Please select a technician.');
+      return;
+    }
+
+    db.ref('maintenance').push({
+      username, vehicle, type, desc, status, date,
+      mileageFrom: orig.mileageFrom || '',
+      mileageTo: orig.mileageTo || '',
+      driverName: orig.username || '',
+    }).then(() => {
+      return db.ref('driverReports/' + selectedDriverReportId).remove();
+    }).then(() => {
+      logUserAction(currentUserName, `Assigned driver report ID ${selectedDriverReportId} to maintenance (vehicle: ${vehicle}) to technician "${username}"`);
+      closeAssignModal();
+    }).catch(e => alert(e.message));
+  }
+
+  function goToDashboard() {
+    const user = firebase.auth().currentUser;
+    if (!user) return location = '../index.html';
+    firebase.database().ref('users/' + user.uid + '/role').once('value')
+      .then(snap => {
+        const role = snap.val();
+        if (role === 'admin')       location = 'a-dashboard.html';
+        else if (role === 'driver') location = '../driver/d-dashboard.html';
+        else if (role === 'maintenance') location = 'm-dashboard.html';
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('mdate').value = new Date().toISOString().split('T')[0];
+  });
+</script>
+</body>
+</html>

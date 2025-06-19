@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Update User Info</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    .table-container {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .action-group {
+      display: flex;
+      gap: 8px;
+    }
+  </style>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <div class="header-buttons">
+      <button class="dashboard-btn" onclick="goToDashboard()">Go to Dashboard</button>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html">Assign Trips</a>
+      <a href="manage.html">Manage Vehicles &amp; Routes</a>
+      <a href="maintenance.html">Maintenance</a>
+      <a href="update-info.html" class="active">Update User Info</a>
+    </nav>
+
+    <section class="content">
+      <div class="search-bar">
+        <input type="text" placeholder="Search">
+        <button>🔍</button>
+      </div>
+
+      <h2>User Information</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Name</th><th>Username</th><th>Gmail</th>
+              <th>Contact No.</th><th>Role</th><th>Status</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="infoTable"></tbody>
+        </table>
+      </div>
+
+      <h2>Update Information</h2>
+      <form class="form-grid" onsubmit="updateInfo(); return false;">
+        <!-- UID is now readonly -->
+        <label for="fid">ID</label>
+        <input id="fid" readonly>
+
+        <label for="fname">Name</label>
+        <input id="fname" required>
+
+        <label for="funame">Username</label>
+        <input id="funame" required>
+
+        <label for="femail">Gmail</label>
+        <input id="femail" type="email" required>
+
+        <label for="fcontact">Contact No.</label>
+        <input id="fcontact" required pattern="^09[0-9]{9}$"
+               title="Enter a valid Philippine mobile number (e.g., 09171234567)">
+
+        <label for="frole">Role</label>
+        <select id="frole">
+          <option value="admin">Admin</option>
+          <option value="driver">Driver</option>
+        </select>
+
+        <label for="fstatus">Status</label>
+        <select id="fstatus">
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+
+        <div class="form-footer">
+          <button class="primary">Submit</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    // Firebase init
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth(), db = firebase.database();
+
+    // Log user action to auditTrail
+    function logUserAction(user, action) {
+      const timestamp = new Date().toISOString();
+      db.ref('auditTrail').push({ timestamp, user, action });
+    }
+
+    // —————————————————————————————————————————
+    // Auth guard + logout
+    auth.onAuthStateChanged(u => {
+      if (!u) return location = '../index.html';
+      db.ref('users/' + u.uid).get().then(snap => {
+        if (!snap.exists() || snap.val().role !== 'admin') {
+          auth.signOut().then(() => location = '../index.html');
+        }
+      });
+    });
+    function logout() {
+      auth.signOut().then(() => location = '../index.html');
+    }
+
+    // —————————————————————————————————————————
+    // Search/filter helpers
+    const searchInput = document.querySelector('.search-bar input');
+    const tbody       = document.getElementById('infoTable');
+
+    // Reusable filter function
+    function applyFilter() {
+      const q = searchInput.value.trim().toLowerCase();
+      Array.from(tbody.rows).forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    }
+    // Run filter on every keystroke
+    searchInput.addEventListener('input', applyFilter);
+
+    // —————————————————————————————————————————
+    // Table population + Edit form
+    let userData = {};
+    db.ref('users').on('value', snap => {
+      tbody.innerHTML = '';
+      userData = {};
+      let count = 0;
+      snap.forEach(child => {
+        count++;
+        const id = child.key;
+        const u  = child.val();
+        userData[id] = u;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${id}</td>
+          <td>${u.name||''}</td>
+          <td>${u.username||''}</td>
+          <td>${u.email||''}</td>
+          <td>${u.contact||''}</td>
+          <td>${u.role||''}</td>
+          <td>${u.status||'Active'}</td>
+          <td>
+            <span class="action-group">
+              <button class="text-btn" onclick="fillForm('${id}')">Edit</button>
+              <button class="text-btn" onclick="removeUser('${id}', '${u.name||u.username||id}')">Remove</button>
+            </span>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+      adjustInfoTableScroll(count);
+      applyFilter();
+    });
+
+    function adjustInfoTableScroll(rowCount) {
+      const container = document.querySelector('.table-container');
+      if (rowCount >= 6) {
+        container.style.maxHeight = '300px';
+        container.style.overflowY = 'auto';
+      } else {
+        container.style.maxHeight = 'none';
+        container.style.overflowY = 'visible';
+      }
+    }
+
+    function fillForm(id) {
+      const u = userData[id];
+      document.getElementById('fid').value      = id;
+      document.getElementById('fname').value    = u.name  || '';
+      document.getElementById('funame').value   = u.username || '';
+      document.getElementById('femail').value   = u.email || '';
+      document.getElementById('fcontact').value = u.contact || '';
+      document.getElementById('frole').value    = u.role  || '';
+      document.getElementById('fstatus').value  = u.status|| 'Active';
+      document.getElementById('femail').readOnly = true; // Make Gmail field uneditable on edit
+    }
+
+    // Clear the user form fields and make email editable again
+    function clearUserForm() {
+      document.getElementById('fid').value      = '';
+      document.getElementById('fname').value    = '';
+      document.getElementById('funame').value   = '';
+      document.getElementById('femail').value   = '';
+      document.getElementById('fcontact').value = '';
+      document.getElementById('frole').value    = 'admin';
+      document.getElementById('fstatus').value  = 'Active';
+      document.getElementById('femail').readOnly = false; // Make Gmail editable for fresh entries
+    }
+
+    // Update user info and log action
+    function updateInfo() {
+      const id = document.getElementById('fid').value;
+      if (!id) return alert('Please select a user to edit first.');
+
+      const data = {
+        name:     document.getElementById('fname').value.trim(),
+        username: document.getElementById('funame').value.trim(),
+        email:    document.getElementById('femail').value.trim(),
+        contact:  document.getElementById('fcontact').value.trim(),
+        role:     document.getElementById('frole').value,
+        status:   document.getElementById('fstatus').value
+      };
+
+      db.ref('users/' + id).update(data)
+        .then(() => {
+          alert('User info updated.');
+          logUserAction(data.username || data.email || id, `Updated user info for ${data.name}`);
+          clearUserForm();
+          applyFilter();
+        })
+        .catch(e => alert(e.message));
+    }
+
+    // Remove user and log action
+    function removeUser(id, displayName) {
+      if (!confirm(`Are you sure you want to remove user "${displayName}"? This cannot be undone.`)) return;
+      db.ref('users/' + id).remove()
+        .then(() => {
+          alert('User removed.');
+          logUserAction(displayName, 'Removed user');
+          clearUserForm();
+        })
+        .catch(e => alert(e.message));
+    }
+
+    function goToDashboard() {
+      const user = firebase.auth().currentUser;
+      if (!user) return location = '../index.html';
+      firebase.database().ref('users/' + user.uid + '/role').once('value')
+        .then(snap => {
+          const role = snap.val();
+          if (role === 'admin')       location = 'a-dashboard.html';
+          else if (role === 'driver') location = '../driver/d-dashboard.html';
+          else if (role === 'maintenance') location = 'm-dashboard.html';
+        });
+    }
+  </script>
+</body>
+</html>

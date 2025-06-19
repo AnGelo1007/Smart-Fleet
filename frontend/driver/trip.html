@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Assigned Trips</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    /* Ensure all tables use scroll when 5+ rows */
+    .table-container {
+      max-height: 300px;
+      overflow-y: auto;
+      transition: max-height 0.2s;
+    }
+
+    /* Header buttons styling for white pill background */
+    .header-buttons {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .header-buttons button {
+      cursor: pointer;
+      background-color: #fff;
+      border: none;
+      color: #2684f3;
+      padding: 8px 20px;
+      font-weight: 600;
+      border-radius: 20px;
+      transition: background-color 0.2s, color 0.2s;
+      box-shadow: 0 2px 6px rgb(33 150 243 / 0.2);
+      font-size: 1rem;
+    }
+    .header-buttons button:hover {
+      background-color: #2684f3;
+      color: white;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header" style="display:flex; justify-content: space-between; align-items: center;">
+    <h1>SMART FLEET</h1>
+    <div class="header-buttons">
+      <button onclick="goToDashboard()">Go to Dashboard</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </header>
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trip.html" class="active">Trips</a>
+      <a href="reports.html">Reports</a>
+    </nav>
+    <section class="content">
+      <h2>Assigned Trips</h2>
+      <div class="table-container" id="tripTableContainer">
+        <table>
+          <thead>
+            <tr>
+              <th>Trip ID</th><th>Date</th><th>Route</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tripList"></tbody>
+        </table>
+      </div>
+
+      <h2>Maintenance Logs</h2>
+      <div class="table-container" id="mntTableContainer">
+        <table>
+          <thead>
+            <tr>
+              <th>Vehicle</th><th>Date</th><th>Type</th><th>Description</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="mntList"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Firebase init
+    const cfg = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(cfg);
+    const auth = firebase.auth(), db = firebase.database();
+
+    // Helper: Log user actions to auditTrail
+    function logUserAction(user, action) {
+      const timestamp = new Date().toISOString();
+      db.ref('auditTrail').push({ timestamp, user, action });
+    }
+
+    function logout() {
+      const user = auth.currentUser;
+      if (user) {
+        db.ref('users/' + user.uid).once('value').then(snap => {
+          const username = snap.val().name || snap.val().username || 'Unknown User';
+          logUserAction(username, 'Logged out');
+          auth.signOut().then(() => location = '../index.html');
+        });
+      } else {
+        auth.signOut().then(() => location = '../index.html');
+      }
+    }
+
+    // Add scrollbar when 5+ rows
+    function adjustTableScroll(containerId, rowCount) {
+      const container = document.getElementById(containerId);
+      if (rowCount >= 5) {
+        container.style.maxHeight = '300px';
+        container.style.overflowY = 'auto';
+      } else {
+        container.style.maxHeight = 'none';
+        container.style.overflowY = 'visible';
+      }
+    }
+
+    auth.onAuthStateChanged(function(user) {
+      if (!user) return location = '../index.html';
+      db.ref('users/' + user.uid).get().then(snap => {
+        if (!snap.exists() || snap.val().role !== 'driver') location = '../index.html';
+
+        const username = snap.val().name || snap.val().username || 'Unknown User';
+        logUserAction(username, 'Logged in');
+
+        // Load only trips assigned to this driver (by UID)
+        db.ref('trips').orderByChild('driverUID').equalTo(user.uid).on('value', snap => {
+          let out = '';
+          let count = 0;
+          snap.forEach(c => {
+            count++;
+            const t = c.val(), id = c.key;
+            let btn = '';
+            if (t.status === 'Assigned') {
+              btn = `<button class="text-btn" onclick="updateTripStatus('${id}', 'Ongoing')">Start</button>`;
+            } else if (t.status === 'Ongoing') {
+              btn = `<button class="text-btn" onclick="updateTripStatus('${id}', 'Completed')">Complete</button>`;
+            } else if (t.status === 'Completed') {
+              btn = `<button class="text-btn" disabled>Completed</button>`;
+            } else {
+              btn = t.status;
+            }
+            out += `<tr>
+              <td>${id}</td>
+              <td>${t.date}</td>
+              <td>${t.route}</td>
+              <td>${btn}</td>
+            </tr>`;
+          });
+          document.getElementById('tripList').innerHTML = out;
+          adjustTableScroll('tripTableContainer', count);
+        });
+      });
+    });
+
+    // Update trip status (Assigned → Ongoing → Completed)
+    function updateTripStatus(tripId, newStatus) {
+      // Get current user info to log action with username
+      const user = auth.currentUser;
+      if (!user) return alert('Not authenticated');
+
+      db.ref('users/' + user.uid).once('value').then(snap => {
+        const username = snap.val().name || snap.val().username || 'Unknown User';
+        db.ref('trips/' + tripId).update({ status: newStatus }).then(() => {
+          logUserAction(username, `${newStatus === 'Ongoing' ? 'Started' : 'Completed'} trip ${tripId}`);
+        });
+      });
+    }
+
+    // Load maintenance logs (with date, type, and status columns)
+    db.ref('maintenance').on('value', snap => {
+      let out = '';
+      let count = 0;
+      snap.forEach(c => {
+        count++;
+        const m = c.val();
+        out += `<tr>
+          <td>${m.vehicle || ''}</td>
+          <td>${m.date || ''}</td>
+          <td>${m.type || ''}</td>
+          <td>${m.desc || ''}</td>
+          <td>${m.status || ''}</td>
+        </tr>`;
+      });
+      document.getElementById('mntList').innerHTML = out;
+      adjustTableScroll('mntTableContainer', count);
+    });
+
+    // Add Go to Dashboard button functionality
+    function goToDashboard() {
+      const user = firebase.auth().currentUser;
+      if (!user) return location = '../index.html';
+      firebase.database().ref('users/' + user.uid + '/role').once('value')
+        .then(snap => {
+          const role = snap.val();
+          if (role === 'admin')       location = 'a-dashboard.html';
+          else if (role === 'driver') location = 'd-dashboard.html';
+          else if (role === 'maintenance') location = 'm-dashboard.html';
+          else location = '../index.html';
+        });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Assign Trips</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .table-container {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <div class="header-buttons">
+      <button class="dashboard-btn" onclick="goToDashboard()">Go to Dashboard</button>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html" class="active">Assign Trips</a>
+      <a href="manage.html">Manage Vehicles &amp; Routes</a>
+      <a href="maintenance.html">Maintenance</a>
+      <a href="update-info.html">Update User Info</a>
+    </nav>
+
+    <section class="content">
+      <!-- SEARCH BAR -->
+      <div class="search-bar">
+        <input id="tripSearch" type="text" placeholder="Search trips…" />
+        <button onclick="filterTrips()">🔍</button>
+      </div>
+
+      <h2>Assign Trip</h2>
+      <form class="form-grid" onsubmit="assignTrip(); return false;">
+        <label for="driver">Driver</label>
+        <input list="driverList" id="driver" placeholder="Start typing a driver’s name…" required />
+        <datalist id="driverList"></datalist>
+
+        <label for="tripDate">Trip Date</label>
+        <input id="tripDate" type="date" required />
+
+        <label for="vehicle">Vehicle / Route</label>
+        <input list="vehicleList" id="vehicle" placeholder="Enter vehicle or route" required />
+        <datalist id="vehicleList"></datalist>
+
+        <div class="form-footer">
+          <button class="primary">Assign</button>
+        </div>
+      </form>
+
+      <h2>Trips</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Driver</th>
+              <th>Date</th>
+              <th>Route</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tripList"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+<script>
+  // — Firebase init —
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+    authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+    databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+    projectId: "smart-fleet-system-79d51",
+    storageBucket: "smart-fleet-system-79d51.appspot.com",
+    messagingSenderId: "803202982073",
+    appId: "1:803202982073:web:a713a86abec662f02fbb68",
+    measurementId: "G-KXXC578RJQ"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth(), db = firebase.database();
+
+  let currentUserName = 'Unknown User';
+
+  // Log user action to auditTrail
+  function logUserAction(user, action) {
+    const timestamp = new Date().toISOString();
+    db.ref('auditTrail').push({ timestamp, user, action });
+  }
+
+  // Auth guard & capture user info
+  auth.onAuthStateChanged(async u => {
+    if (!u) return location = '../index.html';
+    const snap = await db.ref('users/' + u.uid).get();
+    if (!snap.exists() || snap.val().role !== 'admin') {
+      auth.signOut().then(() => location = '../index.html');
+      return;
+    }
+    currentUserName = snap.val().name || snap.val().username || 'Unknown User';
+  });
+
+  function logout() {
+    auth.signOut().then(() => location = '../index.html');
+  }
+
+  // Vehicle label → key map
+  let vehicleMap = {};
+
+  // Populate driver datalist (only active)
+  db.ref('users').orderByChild('role').equalTo('driver')
+    .on('value', snap => {
+      const dl = document.getElementById('driverList');
+      dl.innerHTML = '';
+      snap.forEach(ch => {
+        const u = ch.val();
+        if ((u.status || 'Active') === 'Active') {
+          const opt = document.createElement('option');
+          opt.value = u.name || u.username;
+          dl.appendChild(opt);
+        }
+      });
+    });
+
+  // Populate vehicle datalist & build map
+  db.ref('vehicles').on('value', snap => {
+    const dl = document.getElementById('vehicleList');
+    dl.innerHTML = '';
+    vehicleMap = {};
+    snap.forEach(ch => {
+      const key = ch.key, v = ch.val();
+      const label = `${v.vehicle} • ${v.route}`;
+      vehicleMap[label] = key;
+      if (v.status === 'Available') {
+        const opt = document.createElement('option');
+        opt.value = label;
+        dl.appendChild(opt);
+      }
+    });
+  });
+
+  function assignTrip() {
+    const drvName = document.getElementById('driver').value.trim();
+    const date  = document.getElementById('tripDate').value;
+    const route = document.getElementById('vehicle').value.trim();
+
+    if (!drvName || !date || !route) {
+      return alert('Please fill all fields.');
+    }
+
+    db.ref('users').orderByChild('name').equalTo(drvName).once('value').then(snap => {
+      let drvUID = null;
+      snap.forEach(child => { drvUID = child.key; });
+
+      if (!drvUID) {
+        alert('Driver not found.');
+        throw new Error('Driver not found.');
+      }
+
+      let key = vehicleMap[route];
+      if (!key) {
+        const found = Object.entries(vehicleMap)
+          .find(([label]) => label.toLowerCase() === route.toLowerCase());
+        key = found && found[1];
+      }
+      if (!key) {
+        alert('That vehicle is not Available. Please select an available one.');
+        throw new Error('Vehicle not found.');
+      }
+
+      return db.ref('trips')
+        .orderByChild('route').equalTo(route)
+        .once('value')
+        .then(tripSnap => {
+          let sameDate = false, activeAssignment = false;
+          tripSnap.forEach(child => {
+            const t = child.val();
+            if (t.date === date) sameDate = true;
+            if (t.status && t.status.toLowerCase() !== 'completed') activeAssignment = true;
+          });
+          if (sameDate) {
+            alert('This truck/route is already assigned for this date. Please choose another date or truck.');
+            throw new Error('Duplicate trip assignment for same date.');
+          }
+          if (activeAssignment) {
+            alert('This truck/route is currently assigned and not completed. Only completed trucks/routes can be reassigned.');
+            throw new Error('Truck already assigned and not completed.');
+          }
+          return db.ref('vehicles/' + key + '/status').get();
+        })
+        .then(vsnap => {
+          if (vsnap && vsnap.val() !== 'Available') {
+            throw new Error(`"${route}" is already assigned or unavailable.`);
+          }
+          return db.ref('trips').push({
+            driver: drvName,
+            driverUID: drvUID,
+            date,
+            route,
+            status: 'Assigned'
+          });
+        })
+        .then(() => db.ref('vehicles/' + key).update({ status: 'Unavailable' }))
+        .then(() => {
+          // Log audit trail for trip assignment
+          logUserAction(currentUserName, `Assigned trip: driver "${drvName}", route "${route}", date "${date}"`);
+
+          document.getElementById('driver').value   = '';
+          document.getElementById('tripDate').value = '';
+          document.getElementById('vehicle').value  = '';
+          filterTrips();
+          loadTrips();
+        })
+        .catch(e => {
+          if (e && e.message &&
+              e.message !== 'Duplicate trip assignment for same date.' &&
+              e.message !== 'Truck already assigned and not completed.') {
+            alert(e.message);
+          }
+        });
+    });
+  }
+
+  // Load and render trips
+  function loadTrips() {
+    db.ref('trips').once('value').then(snap => {
+      const rows = [];
+      snap.forEach(ch => {
+        const t = ch.val(), id = ch.key;
+        rows.push(
+          `<tr>
+             <td>${id}</td>
+             <td>${t.driver}</td>
+             <td>${t.date}</td>
+             <td>${t.route}</td>
+             <td>${t.status}</td>
+             <td>
+               <button class="text-btn" onclick="removeTrip('${id}')">Remove</button>
+               <button class="text-btn" onclick="markTripCompleted('${id}')">Mark Completed</button>
+             </td>
+           </tr>`
+        );
+      });
+      document.getElementById('tripList').innerHTML = rows.join('');
+      adjustTripTableScroll(rows.length);
+      filterTrips();
+    });
+  }
+
+  // Add scrollbar for many rows
+  function adjustTripTableScroll(rowCount) {
+    const container = document.querySelector('.table-container');
+    if (rowCount >= 6) {
+      container.style.maxHeight = '300px';
+      container.style.overflowY = 'auto';
+    } else {
+      container.style.maxHeight = 'none';
+      container.style.overflowY = 'visible';
+    }
+  }
+
+  // Remove trip and free vehicle, log audit
+  async function removeTrip(id) {
+    if (!confirm('Are you sure you want to remove this trip?')) return;
+    try {
+      const snap = await db.ref('trips/' + id).get();
+      const t = snap.val();
+      const key = vehicleMap[t.route];
+      if (key) {
+        await db.ref('vehicles/' + key).update({ status: 'Available' });
+      }
+
+      await db.ref('trips/' + id).remove();
+      logUserAction(currentUserName, `Removed trip ID ${id} (driver: "${t.driver}", route: "${t.route}", date: "${t.date}")`);
+      loadTrips();
+    } catch(e) {
+      alert(e.message);
+    }
+  }
+
+  // Mark trip completed, copy to driverCompletedTrips, update vehicle status, log audit
+  async function markTripCompleted(id) {
+    try {
+      const snap = await db.ref('trips/' + id).get();
+      if (!snap.exists()) throw new Error('Trip not found');
+      const trip = snap.val();
+
+      // Update trip status to Completed
+      await db.ref('trips/' + id).update({ status: 'Completed' });
+
+      // Copy trip to driverCompletedTrips for driver history
+      await db.ref(`driverCompletedTrips/${trip.driverUID}/${id}`).set(trip);
+
+      // Mark vehicle as Available again
+      const key = vehicleMap[trip.route];
+      if (key) {
+        await db.ref('vehicles/' + key).update({ status: 'Available' });
+      }
+
+      logUserAction(currentUserName, `Marked trip ID ${id} as Completed (driver: "${trip.driver}", route: "${trip.route}", date: "${trip.date}")`);
+
+      loadTrips();
+    } catch(e) {
+      alert(e.message);
+    }
+  }
+
+  // Filter visible rows
+  function filterTrips() {
+    const q = document.getElementById('tripSearch').value.toLowerCase();
+    document.querySelectorAll('#tripList tr').forEach(r => {
+      r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+  document.getElementById('tripSearch').addEventListener('input', filterTrips);
+
+  loadTrips();
+
+  function goToDashboard() {
+    const user = firebase.auth().currentUser;
+    if (!user) return location = '../index.html';
+    firebase.database().ref('users/' + user.uid + '/role').once('value')
+      .then(snap => {
+        const role = snap.val();
+        if (role === 'admin')       location = 'a-dashboard.html';
+        else if (role === 'driver') location = '../driver/d-dashboard.html';
+        else if (role === 'maintenance') location = 'm-dashboard.html';
+      });
+  }
+</script>
+</body>
+</html>

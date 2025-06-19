@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Dashboard | SMART FLEET</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #2684f3;
+      color: #fff;
+      padding: 15px 30px;
+    }
+
+    .header div:first-child {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: Arial, Helvetica, sans-serif;
+      letter-spacing: 1px;
+    }
+    
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logout-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.16s, color 0.16s;
+      text-decoration: underline;
+    }
+
+    .logout-btn:hover {
+      background: #fff;
+      color: #2196f3;
+      text-decoration: none;
+    }
+
+    .container {
+      display: flex;
+      min-height: calc(100vh - 68px);
+      background: #fff;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 220px;
+      background-color: #957DAD;
+      padding: 30px 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar a {
+      display: block;
+      color: white;
+      text-decoration: none;
+      margin-bottom: 20px;
+      font-size: 24px;
+      border-radius: 5px;
+      padding: 5px 10px;
+      transition: background 0.2s;
+      font-family: Arial, Helvetica, sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+
+    .sidebar a.active,
+    .sidebar a:hover {
+      background-color: #7E57C2;
+      color: white;
+      font-weight: 700;
+    }
+
+    .content {
+      flex: 1;
+      padding: 38px 44px;
+      background: #fff;
+      min-height: 100vh;
+    }
+
+    h2 {
+      font-size: 1.45rem;
+      margin-bottom: 1.1em;
+      margin-top: 0;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    h3 {
+      font-size: 1.13rem;
+      margin: 2.3em 0 0.6em 0;
+      color: #555;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .card-grid {
+      display: flex;
+      gap: 1.3rem;
+      margin: 1.3rem 0 1.6rem 0;
+    }
+
+    .card {
+      flex: 1 1 0;
+      background: #e6f2fa;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #0001;
+      padding: 1.1rem 0.7rem;
+      text-align: center;
+      min-width: 140px;
+      border: 2px solid #2196f3;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-weight: 500;
+      font-size: 1.09rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s ease;
+    }
+
+    .card:hover {
+      background-color: #c8e1fa;
+    }
+
+    .table-container {
+      max-height: 235px;
+      overflow-y: auto;
+      border-radius: 9px;
+      background: #f8fcff;
+      box-shadow: 0 1px 6px #0001;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 15px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 8px 7px;
+      border-bottom: 1px solid #e5e5e5;
+      vertical-align: middle;
+    }
+
+    th {
+      background: #f4f8fa;
+      color: #333;
+      font-weight: 600;
+    }
+
+    /* Style for Remove button in audit trail */
+    .remove-btn {
+      background: #e53935;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.2s ease;
+    }
+    .remove-btn:hover {
+      background: #ab000d;
+    }
+
+    /* Search input style */
+    #searchInput {
+      margin-bottom: 12px;
+      width: 100%;
+      max-width: 400px;
+      padding: 8px 12px;
+      font-size: 16px;
+      border-radius: 20px;
+      border: 1.5px solid #ccc;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #searchInput:focus {
+      border-color: #2684f3;
+      box-shadow: 0 0 5px #2684f3;
+    }
+
+    /* Simplified Remove Selected Button style */
+    #removeSelectedBtn {
+      background: none;
+      border: none;
+      color: #e53935;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 12px;
+      font-size: 0.9rem;
+      border-radius: 4px;
+      text-decoration: underline;
+      transition: color 0.3s ease;
+    }
+    #removeSelectedBtn:disabled {
+      color: #ccc;
+      cursor: default;
+      text-decoration: none;
+    }
+    #removeSelectedBtn:not(:disabled):hover {
+      color: #ab000d;
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        min-height: auto;
+        flex-direction: row;
+        justify-content: space-around;
+      }
+      .content {
+        padding: 20px 2vw;
+      }
+      .card-grid {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>SMART FLEET</div>
+    <div class="nav-right">
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </div>
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html">Assign Trips</a>
+      <a href="manage.html">Manage Vehicles & Routes</a>
+      <a href="maintenance.html">Maintenance</a>
+      <a href="update-info.html">Update User Info</a>
+      <a href="maintenance-report.html">Maintenance Report</a> <!-- New link -->
+    </nav>
+    <section class="content">
+      <h2>Dashboard</h2>
+      <div id="summary" class="card-grid"></div>
+      <h3>Audit Trail / Recent Activity</h3>
+
+      <!-- Search bar + Remove Selected button -->
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; max-width: 400px;">
+        <input
+          type="text"
+          id="searchInput"
+          placeholder="Search logs by user or action..."
+          oninput="filterAuditLogs()"
+          autocomplete="off"
+          style="flex-grow:1;"
+        />
+        <button
+          id="removeSelectedBtn"
+          disabled
+          onclick="removeSelectedEntries()"
+        >
+          Remove Selected
+        </button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Action</th> <!-- Remove button column -->
+            </tr>
+          </thead>
+          <tbody id="activityFeed"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Firebase initialization
+    firebase.initializeApp({
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    });
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    let auditEntries = []; // Store fetched logs for filtering
+    let selectedKeys = new Set();
+
+    // Helper: log user action with descriptive string for action field only
+    function logUserAction(user, action) {
+      const timestamp = new Date().toISOString();
+      db.ref('auditTrail').push({ timestamp, user, action });
+    }
+
+    function logout() {
+      const user = auth.currentUser;
+      if (user) {
+        db.ref('users/' + user.uid).once('value').then(snap => {
+          const username = snap.val().name || snap.val().username || 'Unknown User';
+          logUserAction(username, 'Logged out');
+          auth.signOut().then(() => location = '../index.html');
+        });
+      } else {
+        auth.signOut().then(() => location = '../index.html');
+      }
+    }
+
+    auth.onAuthStateChanged(user => {
+      if (!user) return location = '../index.html';
+      db.ref('users/' + user.uid).once('value').then(snap => {
+        const role = snap.val().role;
+        const username = snap.val().name || snap.val().username || 'Unknown User';
+        if (role !== 'admin') return logout();
+        logUserAction(username, 'Logged in');
+        loadAdmin();
+        loadAuditTrail();
+      });
+    });
+
+    function loadAdmin() {
+      const sum = document.getElementById('summary');
+      Promise.all([
+        db.ref('vehicles').once('value'),
+        db.ref('trips').orderByChild('status').equalTo('Ongoing').once('value'),
+        db.ref('maintenance').once('value')
+      ]).then(([vehiclesSnap, tripsSnap, maintenanceSnap]) => {
+        const totalVehicles = vehiclesSnap.numChildren();
+        const ongoingTrips = tripsSnap.numChildren();
+
+        const pendingStatuses = ['Pending', 'Scheduled', 'Assigned'];
+        let pendingMaintenanceCount = 0;
+        maintenanceSnap.forEach(child => {
+          const m = child.val();
+          if (pendingStatuses.includes(m.status)) {
+            pendingMaintenanceCount++;
+          }
+        });
+
+        sum.innerHTML = `
+          <div class="card" onclick="location.href='manage.html'"><h3>${totalVehicles}</h3><p>Total Vehicles</p></div>
+          <div class="card" onclick="location.href='trips.html'"><h3>${ongoingTrips}</h3><p>Active Trips</p></div>
+          <div class="card" onclick="location.href='maintenance.html'"><h3>${pendingMaintenanceCount}</h3><p>Pending Maintenance</p></div>
+          <div class="card" onclick="location.href='maintenance-report.html'"><h3>View Report</h3><p>Maintenance Analytics</p></div>
+        `;
+      });
+    }
+
+    // Remove single audit trail entry by key
+    function removeAuditEntry(key) {
+      if (!confirm("Are you sure you want to remove this activity log?")) return;
+      db.ref('auditTrail/' + key).remove()
+        .then(() => {
+          alert("Activity log removed.");
+          loadAuditTrail();
+        })
+        .catch(e => alert("Failed to remove activity: " + e.message));
+    }
+
+    // Remove all selected entries
+    function removeSelectedEntries() {
+      if (selectedKeys.size === 0) return;
+      if (!confirm(`Are you sure you want to remove ${selectedKeys.size} selected activity log(s)?`)) return;
+
+      const removals = [];
+      selectedKeys.forEach(key => {
+        removals.push(db.ref('auditTrail/' + key).remove());
+      });
+
+      Promise.all(removals).then(() => {
+        alert('Selected logs removed.');
+        selectedKeys.clear();
+        updateRemoveSelectedBtn();
+        loadAuditTrail();
+      }).catch(e => alert('Failed to remove some entries: ' + e.message));
+    }
+
+    // Toggle individual checkbox selection
+    function toggleCheckbox(key, checked) {
+      if (checked) selectedKeys.add(key);
+      else selectedKeys.delete(key);
+      updateRemoveSelectedBtn();
+      updateSelectAllCheckbox();
+    }
+
+    // Toggle select all checkbox
+    function toggleSelectAll(checkbox) {
+      const checked = checkbox.checked;
+      selectedKeys.clear();
+      document.querySelectorAll('#activityFeed input[type="checkbox"]').forEach(cb => {
+        cb.checked = checked;
+        if (checked) selectedKeys.add(cb.dataset.key);
+      });
+      updateRemoveSelectedBtn();
+    }
+
+    // Enable or disable Remove Selected button based on selection count
+    function updateRemoveSelectedBtn() {
+      const btn = document.getElementById('removeSelectedBtn');
+      btn.disabled = selectedKeys.size === 0;
+    }
+
+    // Update the selectAll checkbox status based on individual selections
+    function updateSelectAllCheckbox() {
+      const allCheckbox = document.getElementById('selectAllCheckbox');
+      const checkboxes = document.querySelectorAll('#activityFeed input[type="checkbox"]');
+      if (checkboxes.length === 0) {
+        allCheckbox.checked = false;
+        allCheckbox.indeterminate = false;
+        return;
+      }
+      const checkedBoxes = Array.from(checkboxes).filter(cb => cb.checked);
+      if (checkedBoxes.length === checkboxes.length) {
+        allCheckbox.checked = true;
+        allCheckbox.indeterminate = false;
+      } else if (checkedBoxes.length > 0) {
+        allCheckbox.checked = false;
+        allCheckbox.indeterminate = true;
+      } else {
+        allCheckbox.checked = false;
+        allCheckbox.indeterminate = false;
+      }
+    }
+
+    // Load audit trail with remove buttons and checkboxes
+    function loadAuditTrail() {
+      const feed = document.getElementById('activityFeed');
+      db.ref('auditTrail').orderByChild('timestamp').limitToLast(100).once('value').then(snap => {
+        auditEntries = [];
+        snap.forEach(child => {
+          const val = child.val();
+          val.key = child.key; // Save key for removal
+          auditEntries.push(val);
+        });
+
+        // Sort descending by timestamp string (ISO format sorts correctly)
+        auditEntries.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
+
+        displayAuditEntries(auditEntries);
+      }).catch(error => {
+        console.error('Error loading audit trail:', error);
+        feed.innerHTML = '<tr><td colspan="5">Failed to load activity</td></tr>';
+      });
+    }
+
+    // Display audit entries filtered or all
+    function displayAuditEntries(entries) {
+      const feed = document.getElementById('activityFeed');
+      if (!entries.length) {
+        feed.innerHTML = '<tr><td colspan="5">No activity found</td></tr>';
+        return;
+      }
+      let html = '';
+      entries.forEach(a => {
+        const date = new Date(a.timestamp);
+        const dateStr = isNaN(date) ? a.timestamp : date.toLocaleString();
+        html += `
+          <tr>
+            <td>
+              <input
+                type="checkbox"
+                data-key="${a.key}"
+                onchange="toggleCheckbox('${a.key}', this.checked)"
+              />
+            </td>
+            <td>${dateStr}</td>
+            <td>${a.user || ''}</td>
+            <td>${a.action || ''}</td>
+            <td><button class="remove-btn" onclick="removeAuditEntry('${a.key}')">Remove</button></td>
+          </tr>
+        `;
+      });
+      feed.innerHTML = html;
+      document.getElementById('selectAllCheckbox').checked = false;
+      selectedKeys.clear();
+      updateRemoveSelectedBtn();
+    }
+
+    // Filter audit logs by search input matching user or action fields
+    function filterAuditLogs() {
+      const filterText = document.getElementById('searchInput').value.trim().toLowerCase();
+      if (!filterText) {
+        displayAuditEntries(auditEntries);
+        return;
+      }
+      const filtered = auditEntries.filter(entry => {
+        const user = (entry.user || '').toLowerCase();
+        const action = (entry.action || '').toLowerCase();
+        return user.includes(filterText) || action.includes(filterText);
+      });
+      displayAuditEntries(filtered);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Manage Vehicles & Routes</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .table-container {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET</h1>
+    <div class="header-buttons">
+      <button class="dashboard-btn" onclick="goToDashboard()">Go to Dashboard</button>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trips.html">Assign Trips</a>
+      <a href="manage.html" class="active">Manage Vehicles &amp; Routes</a>
+      <a href="maintenance.html">Maintenance</a>
+      <a href="update-info.html">Update User Info</a>
+    </nav>
+
+    <section class="content">
+      <div class="search-bar">
+        <input id="vehSearch" type="text" placeholder="Search vehicles/routes…" />
+        <button onclick="filterVehicles()">🔍</button>
+      </div>
+
+      <h2>Manage Vehicles &amp; Routes</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Vehicle</th>
+              <th>Route</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="vehTable"></tbody>
+        </table>
+      </div>
+
+      <h2 id="formTitle">Register Vehicle &amp; Route</h2>
+      <form class="form-grid" onsubmit="onVehicleFormSubmit(); return false;">
+        <label for="newVeh">Vehicle</label>
+        <input id="newVeh" placeholder="e.g. Truck #12" required />
+
+        <label for="newRoute">Route</label>
+        <input id="newRoute" placeholder="e.g. MNL – DVO" required />
+
+        <label for="newStatus">Status</label>
+        <select id="newStatus">
+          <option value="Available">Available</option>
+          <option value="Unavailable">Unavailable</option>
+        </select>
+
+        <div class="form-footer">
+          <button id="cancelBtn" type="button" class="text-btn" style="display:none;" onclick="cancelEdit()">Cancel</button>
+          <button id="formBtn" class="primary">Add Vehicle</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+<script>
+  // Firebase init
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+    authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+    databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+    projectId: "smart-fleet-system-79d51",
+    storageBucket: "smart-fleet-system-79d51.appspot.com",
+    messagingSenderId: "803202982073",
+    appId: "1:803202982073:web:a713a86abec662f02fbb68",
+    measurementId: "G-KXXC578RJQ"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth(), db = firebase.database();
+
+  let currentUserName = 'Unknown User';
+
+  // Log user action to auditTrail
+  function logUserAction(user, action) {
+    const timestamp = new Date().toISOString();
+    db.ref('auditTrail').push({ timestamp, user, action });
+  }
+
+  // Auth guard & logout
+  auth.onAuthStateChanged(async u => {
+    if (!u) return location = '../index.html';
+    const snap = await db.ref('users/' + u.uid).get();
+    if (!snap.exists() || snap.val().role !== 'admin') {
+      auth.signOut().then(() => location = '../index.html');
+      return;
+    }
+    currentUserName = snap.val().name || snap.val().username || 'Unknown User';
+  });
+
+  function logout() {
+    auth.signOut().then(() => location = '../index.html');
+  }
+
+  // Render vehicles sorted ascending by vehicle, then route
+  function renderVehicles(list) {
+    list.sort((a, b) => {
+      const aVeh = (a.vehicle || '').toLowerCase();
+      const bVeh = (b.vehicle || '').toLowerCase();
+      if (aVeh < bVeh) return -1;
+      if (aVeh > bVeh) return 1;
+      const aRoute = (a.route || '').toLowerCase();
+      const bRoute = (b.route || '').toLowerCase();
+      if (aRoute < bRoute) return -1;
+      if (aRoute > bRoute) return 1;
+      return 0;
+    });
+
+    const html = list.map(v => `
+      <tr>
+        <td>${v.id}</td>
+        <td>${v.vehicle}</td>
+        <td>${v.route}</td>
+        <td>${v.status}</td>
+        <td>
+          <button class="text-btn" onclick="startEdit('${v.id}')">Edit</button>
+          <button class="text-btn" onclick="removeVehicle('${v.id}')">Remove</button>
+        </td>
+      </tr>
+    `).join('');
+    
+    document.getElementById('vehTable').innerHTML = html;
+    const container = document.querySelector('.table-container');
+    if (list.length >= 6) {
+      container.style.maxHeight = '300px';
+      container.style.overflowY = 'auto';
+    } else {
+      container.style.maxHeight = 'none';
+      container.style.overflowY = 'visible';
+    }
+  }
+
+  let allVehicles = [];
+  let editingId = null;
+
+  const formTitle = document.getElementById('formTitle');
+  const formBtn = document.getElementById('formBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const newVehInput = document.getElementById('newVeh');
+  const newRouteInput = document.getElementById('newRoute');
+  const statusSelect = document.getElementById('newStatus');
+  const searchInput = document.getElementById('vehSearch');
+
+  db.ref('vehicles').on('value', async snap => {
+    allVehicles = [];
+    snap.forEach(ch => {
+      allVehicles.push({ id: ch.key, ...ch.val() });
+    });
+
+    // Update availability status
+    for (const v of allVehicles) {
+      const label = `${v.vehicle} • ${v.route}`;
+      await checkAndSetVehicleAvailability(label, v.id);
+    }
+
+    const updatedSnap = await db.ref('vehicles').once('value');
+    allVehicles = [];
+    updatedSnap.forEach(ch => {
+      allVehicles.push({ id: ch.key, ...ch.val() });
+    });
+
+    renderVehicles(allVehicles);
+  });
+
+  function filterVehicles() {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) {
+      renderVehicles(allVehicles);
+    } else {
+      renderVehicles(allVehicles.filter(v =>
+        v.id.toLowerCase().includes(q) ||
+        v.vehicle.toLowerCase().includes(q) ||
+        v.route.toLowerCase().includes(q) ||
+        v.status.toLowerCase().includes(q)
+      ));
+    }
+  }
+  searchInput.addEventListener('input', filterVehicles);
+
+  function onVehicleFormSubmit() {
+    return editingId ? updateVehicle() : addVehicle();
+  }
+
+  async function addVehicle() {
+    const vehicle = newVehInput.value.trim();
+    const route = newRouteInput.value.trim();
+    const status = statusSelect.value;
+
+    if (!vehicle || !route) return alert('Fill both fields.');
+
+    const duplicate = allVehicles.find(
+      v => v.vehicle.trim().toLowerCase() === vehicle.toLowerCase()
+    );
+    if (duplicate) {
+      alert('A vehicle with the same name already exists!');
+      return;
+    }
+
+    try {
+      await db.ref('vehicles').push({ vehicle, route, status });
+      logUserAction(currentUserName, `Added vehicle "${vehicle}" with route "${route}" and status "${status}"`);
+      newVehInput.value = '';
+      newRouteInput.value = '';
+      statusSelect.value = 'Available';
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function startEdit(id) {
+    const v = allVehicles.find(x => x.id === id);
+    if (!v) return;
+    
+    editingId = id;
+    formTitle.textContent = 'Update Vehicle & Route';
+    formBtn.textContent = 'Save Changes';
+    cancelBtn.style.display = 'inline-block';
+    newVehInput.value = v.vehicle;
+    newRouteInput.value = v.route;
+    statusSelect.value = v.status;
+    statusSelect.disabled = true;
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    formTitle.textContent = 'Register Vehicle & Route';
+    formBtn.textContent = 'Add Vehicle';
+    cancelBtn.style.display = 'none';
+    newVehInput.value = '';
+    newRouteInput.value = '';
+    statusSelect.value = 'Available';
+    statusSelect.disabled = false;
+  }
+
+  async function checkAndSetVehicleAvailability(vehicleLabel, vehicleId) {
+    if (!vehicleLabel || !vehicleId) return;
+
+    const mntSnap = await db.ref('maintenance').orderByChild('vehicle').equalTo(vehicleLabel).once('value');
+    
+    const activeMaintenanceStatuses = ['Pending', 'Assigned', 'In Progress'];
+    let hasActiveMaintenance = false;
+    mntSnap.forEach(child => {
+      const m = child.val();
+      if (activeMaintenanceStatuses.includes(m.status)) {
+        hasActiveMaintenance = true;
+      }
+    });
+    if (hasActiveMaintenance) {
+      await db.ref('vehicles/' + vehicleId).update({ status: 'Unavailable' });
+      return;
+    }
+
+    let allMaintenanceCompletedOrCancelled = true;
+    mntSnap.forEach(child => {
+      const m = child.val();
+      if (!['Completed', 'Cancelled'].includes(m.status)) {
+        allMaintenanceCompletedOrCancelled = false;
+      }
+    });
+    if (!allMaintenanceCompletedOrCancelled) {
+      await db.ref('vehicles/' + vehicleId).update({ status: 'Unavailable' });
+      return;
+    }
+
+    const tripsSnap = await db.ref('trips').orderByChild('route').equalTo(vehicleLabel).once('value');
+    let hasActiveTrips = false;
+    tripsSnap.forEach(child => {
+      const t = child.val();
+      if (t.status !== 'Completed') {
+        hasActiveTrips = true;
+      }
+    });
+    if (hasActiveTrips) {
+      await db.ref('vehicles/' + vehicleId).update({ status: 'Unavailable' });
+      return;
+    }
+
+    await db.ref('vehicles/' + vehicleId).update({ status: 'Available' });
+  }
+
+  async function updateVehicle() {
+    const vehicle = newVehInput.value.trim();
+    const route = newRouteInput.value.trim();
+    const newStatus = statusSelect.value;
+
+    if (!vehicle || !route) return alert('Fill both fields.');
+
+    const duplicate = allVehicles.find(
+      v => v.vehicle.trim().toLowerCase() === vehicle.toLowerCase() &&
+           v.id !== editingId
+    );
+    if (duplicate) {
+      alert('A vehicle with the same name already exists!');
+      return;
+    }
+
+    try {
+      const oldSnap = await db.ref('vehicles/' + editingId).once('value');
+      const oldVehicle = oldSnap.val().vehicle;
+      const oldRoute = oldSnap.val().route;
+      const oldLabel = `${oldVehicle} • ${oldRoute}`;
+      const newLabel = `${vehicle} • ${route}`;
+
+      await db.ref('vehicles/' + editingId).update({ vehicle, route, status: newStatus });
+
+      if (oldLabel !== newLabel) {
+        const tripSnap = await db.ref('trips').once('value');
+        tripSnap.forEach(child => {
+          const t = child.val();
+          if (t.route === oldLabel) {
+            child.ref.update({ route: newLabel });
+          }
+        });
+        const mntSnap = await db.ref('maintenance').once('value');
+        mntSnap.forEach(child => {
+          const m = child.val();
+          if (m.vehicle === oldLabel) {
+            child.ref.update({ vehicle: newLabel });
+          }
+        });
+      }
+
+      await checkAndSetVehicleAvailability(newLabel, editingId);
+
+      logUserAction(currentUserName, `Updated vehicle ID ${editingId} to vehicle "${vehicle}", route "${route}", status "${newStatus}"`);
+
+      cancelEdit();
+
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function notifyVehicleUpdate(id, vehicle, route) {
+    const updateData = { id, vehicle, route };
+    localStorage.setItem('vehicleUpdate', JSON.stringify(updateData));
+  }
+
+  async function removeVehicle(id) {
+    if (!confirm('Are you sure you want to remove this vehicle? All related trips and maintenance will also be removed.')) return;
+    try {
+      const vSnap = await db.ref('vehicles/' + id).once('value');
+      if (!vSnap.exists()) return;
+      const vehicle = vSnap.val().vehicle;
+      const route = vSnap.val().route;
+      const label = `${vehicle} • ${route}`;
+
+      // Remove related trips
+      const tripSnap = await db.ref('trips').once('value');
+      tripSnap.forEach(child => {
+        const t = child.val();
+        if (t.route === label) {
+          child.ref.remove();
+        }
+      });
+
+      // Remove related maintenance
+      const mntSnap = await db.ref('maintenance').once('value');
+      mntSnap.forEach(child => {
+        const m = child.val();
+        if (m.vehicle === label) {
+          child.ref.remove();
+        }
+      });
+
+      // Remove the vehicle
+      await db.ref('vehicles/' + id).remove();
+
+      logUserAction(currentUserName, `Removed vehicle "${vehicle}" with route "${route}" and ID ${id}`);
+
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  function goToDashboard() {
+    const user = firebase.auth().currentUser;
+    if (!user) return location = '../index.html';
+    firebase.database().ref('users/' + user.uid + '/role').once('value')
+      .then(snap => {
+        const role = snap.val();
+        if (role === 'admin')       location = 'a-dashboard.html';
+        else if (role === 'driver') location = '../driver/d-dashboard.html';
+        else if (role === 'maintenance') location = 'm-dashboard.html';
+      });
+  }
+</script>
+</body>
+</html>

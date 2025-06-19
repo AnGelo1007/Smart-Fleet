@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Maintenance Dashboard | SMART FLEET</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    /* your existing styles */
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #fff;
+    }
+    /* ... rest of styles unchanged ... */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #2684f3;
+      color: #fff;
+      padding: 15px 30px;
+    }
+    .header h1 {
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .logout-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.16s, color 0.16s;
+      text-decoration: underline;
+    }
+    .logout-btn:hover {
+      background: #fff;
+      color: #2196f3;
+      text-decoration: none;
+    }
+    .container {
+      display: flex;
+      min-height: calc(100vh - 68px);
+      background: #fff;
+    }
+    .sidebar {
+      width: 220px;
+      background-color: #957DAD;
+      padding: 30px 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar a {
+      display: block;
+      color: white;
+      text-decoration: none;
+      margin-bottom: 20px;
+      font-size: 24px;
+      border-radius: 5px;
+      padding: 5px 10px;
+      transition: background 0.2s;
+      font-weight: 700;
+    }
+    .sidebar a.active,
+    .sidebar a:hover {
+      background-color: #7E57C2;
+      color: white;
+      font-weight: 700;
+    }
+    .content {
+      flex: 1;
+      padding: 38px 44px;
+      background: #fff;
+      min-height: 100vh;
+    }
+    .card-grid {
+      display: flex;
+      gap: 1.3rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      flex: 1 1 0;
+      background: #e6f2fa;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #0001;
+      padding: 1.1rem 0.7rem;
+      text-align: center;
+      min-width: 140px;
+      border: 2px solid #2196f3;
+      font-weight: 500;
+      font-size: 1.1rem;
+      cursor: pointer; /* Make it look clickable */
+      user-select: none;
+      transition: background-color 0.2s ease;
+    }
+    .card:hover {
+      background-color: #c8e1fa;
+    }
+    h2, h3 {
+      margin-top: 0;
+      font-weight: 700;
+    }
+    .search-bar {
+      margin-bottom: 10px;
+    }
+    .search-bar input {
+      padding: 6px 10px;
+      width: 250px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .remove-btn {
+      margin-bottom: 15px;
+      padding: 6px 12px;
+      font-size: 14px;
+      background-color: #d9534f;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .remove-btn:hover {
+      background-color: #c9302c;
+    }
+    .table-container {
+      max-height: 300px;
+      overflow-y: auto;
+      border-radius: 9px;
+      background: #f8fcff;
+      box-shadow: 0 1px 6px #0001;
+      margin-bottom: 2rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 15px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 7px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    th {
+      background: #f4f8fa;
+      color: #333;
+      font-weight: 600;
+    }
+    tr:hover {
+      background-color: #dbe9fd;
+      cursor: pointer;
+    }
+    input[type="checkbox"] {
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>SMART FLEET DASHBOARD</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </div>
+  <div class="container">
+    <nav class="sidebar">
+      <a href="m-dashboard.html" class="active">Dashboard</a>
+      <a href="maintenance.html">Maintenance Log</a>
+    </nav>
+    <section class="content">
+      <h2>Maintenance Dashboard</h2>
+
+      <div id="summary" class="card-grid"></div>
+
+      <!-- Search bar and Remove Selected button -->
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search completed maintenance…" oninput="filterTable()" />
+      </div>
+      <button class="remove-btn" onclick="removeSelected()">Remove Selected</button>
+
+      <h3>Completed Maintenance Tasks</h3>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)" /></th>
+              <th>ID</th><th>Technician</th><th>Vehicle</th><th>Type</th><th>Description</th><th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="completedMaintenanceList"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+  // Firebase init
+  const firebaseConfig = {
+    apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+    authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+    databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+    projectId: "smart-fleet-system-79d51",
+    storageBucket: "smart-fleet-system-79d51.appspot.com",
+    messagingSenderId: "803202982073",
+    appId: "1:803202982073:web:a713a86abec662f02fbb68",
+    measurementId: "G-KXXC578RJQ"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  let currentUser = null;
+  let currentUsername = 'Unknown User'; // global username cache
+  let completedMaintenances = [];
+
+  function logout() {
+    auth.signOut().then(() => location = '../index.html');
+  }
+
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) return location = '../index.html';
+    currentUser = user;
+
+    // Fetch and cache username once here
+    const userSnap = await db.ref('users/' + user.uid).once('value');
+    const userData = userSnap.val() || {};
+    currentUsername = userData.username || userData.name || 'Unknown User';
+
+    if (userData.role !== 'maintenance') return logout();
+    loadDashboard();
+  });
+
+  async function loadDashboard() {
+    const summaryEl = document.getElementById('summary');
+    const completedMaintenanceList = document.getElementById('completedMaintenanceList');
+
+    const activeStatuses = ['pending', 'assigned', 'scheduled', 'in progress'];
+
+    const maintenanceSnap = await db.ref('maintenance').once('value');
+    let assignedCount = 0;
+    completedMaintenances = [];
+    maintenanceSnap.forEach(child => {
+      const m = child.val();
+      const status = (m.status || '').toLowerCase();
+      if (activeStatuses.includes(status)) {
+        assignedCount++;
+      } else if (status === 'completed') {
+        completedMaintenances.push({ id: child.key, ...m });
+      }
+    });
+
+    summaryEl.innerHTML = `
+      <div class="card" onclick="goToMaintenance()">
+        <h3>${assignedCount}</h3>
+        <p>Assigned Tasks</p>
+      </div>
+      <div class="card" onclick="goToMaintenance()">
+        <h3>${completedMaintenances.length}</h3>
+        <p>Completed Maintenances</p>
+      </div>
+    `;
+
+    renderCompletedTable(completedMaintenances);
+  }
+
+  function goToMaintenance() {
+    window.location.href = 'maintenance.html';
+  }
+
+  function renderCompletedTable(data) {
+    const tbody = document.getElementById('completedMaintenanceList');
+    tbody.innerHTML = data.map(m => `
+      <tr>
+        <td><input type="checkbox" class="rowCheckbox" data-id="${m.id}" /></td>
+        <td>${m.id}</td>
+        <td>${m.username || ''}</td>
+        <td>${m.vehicle || ''}</td>
+        <td>${m.type || ''}</td>
+        <td>${m.desc || ''}</td>
+        <td>${m.date || ''}</td>
+      </tr>
+    `).join('');
+  }
+
+  function filterTable() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    const filtered = completedMaintenances.filter(m => {
+      return (
+        (m.username || '').toLowerCase().includes(query) ||
+        (m.vehicle || '').toLowerCase().includes(query) ||
+        (m.type || '').toLowerCase().includes(query) ||
+        (m.desc || '').toLowerCase().includes(query) ||
+        (m.date || '').toLowerCase().includes(query) ||
+        m.id.toLowerCase().includes(query)
+      );
+    });
+    renderCompletedTable(filtered);
+  }
+
+  function toggleSelectAll(source) {
+    const checkboxes = document.querySelectorAll('.rowCheckbox');
+    checkboxes.forEach(cb => cb.checked = source.checked);
+  }
+
+  async function removeSelected() {
+    const checkboxes = document.querySelectorAll('.rowCheckbox:checked');
+    if (checkboxes.length === 0) {
+      alert('Please select at least one record to remove.');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to remove ${checkboxes.length} selected record(s)?`)) {
+      return;
+    }
+
+    try {
+      const updates = {};
+      const auditEntries = [];
+      const timestamp = new Date().toISOString();
+
+      checkboxes.forEach(cb => {
+        const id = cb.getAttribute('data-id');
+        updates[id] = null; // remove maintenance record
+
+        // Add audit entry for removal using cached username
+        auditEntries.push({
+          userId: currentUser.uid,
+          username: currentUsername,
+          action: `Removed maintenance record ${id}`,
+          timestamp
+        });
+      });
+
+      // Remove selected maintenance records
+      await db.ref('maintenance').update(updates);
+
+      // Add audit trail entries
+      const auditRef = db.ref('auditTrail');
+      for (const entry of auditEntries) {
+        await auditRef.push(entry);
+      }
+
+      alert('Selected records removed successfully.');
+      loadDashboard();
+      document.getElementById('selectAll').checked = false;
+
+    } catch (e) {
+      alert('Error removing records: ' + e.message);
+    }
+  }
+  </script>
+</body>
+</html>

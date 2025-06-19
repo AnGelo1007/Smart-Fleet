@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Driver Dashboard | SMART FLEET</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    /* Card grid and styles */
+    .card-grid { display: flex; gap: 1.3rem; margin-bottom: 2rem; }
+    .card {
+      flex: 1 1 0;
+      background: #e6f2fa;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #0001;
+      padding: 1.1rem 0.7rem;
+      text-align: center;
+      min-width: 140px;
+      border: 2px solid #2196f3;
+      font-weight: 500;
+      font-size: 1.1rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s ease;
+    }
+    .card:hover {
+      background-color: #c8e1fa;
+    }
+    .primary {
+      background-color: #2196f3;
+      color: white;
+      border: none;
+      border-radius: 20px;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: background-color 0.2s;
+      margin-bottom: 2rem;
+    }
+    .primary:hover { background-color: #1769aa; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #2684f3;
+      color: white;
+      padding: 15px 30px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .logout-btn {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.16s, color 0.16s;
+      text-decoration: underline;
+    }
+    .logout-btn:hover { background: white; color: #2196f3; text-decoration: none; }
+    .container {
+      display: flex;
+      min-height: calc(100vh - 68px);
+    }
+    .sidebar {
+      width: 220px;
+      background-color: #957DAD;
+      padding: 30px 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar a {
+      display: block;
+      color: white;
+      text-decoration: none;
+      margin-bottom: 20px;
+      font-size: 24px;
+      border-radius: 5px;
+      padding: 5px 10px;
+      transition: background 0.2s;
+      font-weight: 700;
+    }
+    .sidebar a:hover, .sidebar a.active {
+      background-color: #7E57C2;
+      color: white;
+      font-weight: 700;
+    }
+    .content {
+      flex: 1;
+      padding: 38px 44px;
+      background: white;
+    }
+    h3 {
+      margin-bottom: 8px;
+      color: #222;
+    }
+    .search-input {
+      width: 100%;
+      max-width: 300px;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+      border: 1.5px solid #ccc;
+      border-radius: 6px;
+      outline-offset: 2px;
+      transition: border-color 0.2s;
+    }
+    .search-input:focus {
+      border-color: #2196f3;
+      box-shadow: 0 0 5px #2196f3aa;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin-bottom: 0.75rem;
+      box-shadow: 0 0 8px #0001;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      border-bottom: 1px solid #ddd;
+      padding: 8px 10px;
+      text-align: left;
+      color: #333;
+    }
+    th {
+      background-color: #f4f8fa;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    #removeSelectedBtn {
+      margin-bottom: 2rem;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 6px;
+      background-color: #d32f2f;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    #removeSelectedBtn:hover:enabled {
+      background-color: #b71c1c;
+    }
+    #removeSelectedBtn:disabled {
+      background-color: #f4a4a4;
+      cursor: not-allowed;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header">
+    <h1>SMART FLEET DASHBOARD</h1>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </header>
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trip.html">Trips</a>
+      <a href="reports.html">Reports</a>
+    </nav>
+    <section class="content">
+      <div id="summary" class="card-grid"></div>
+      <button class="primary" onclick="location.href='reports.html'">Report Issue</button>
+
+      <div id="completedSection" style="display:none;">
+        <h3>Completed Trips This Week</h3>
+        <input
+          id="completedSearch"
+          class="search-input"
+          type="search"
+          placeholder="Search Completed Trips..."
+          oninput="filterTable('completedTripsList', this.value)"
+          aria-label="Search Completed Trips"
+        />
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Trip ID</th>
+              <th>Route</th>
+              <th>Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="completedTripsList"></tbody>
+        </table>
+        <button id="removeSelectedBtn" disabled onclick="removeSelectedCompleted()">Remove Selected</button>
+      </div>
+
+      <div id="availableSection" style="display:none;">
+        <h3>Available Vehicles</h3>
+        <input
+          id="availableSearch"
+          class="search-input"
+          type="search"
+          placeholder="Search Available Vehicles..."
+          oninput="filterTable('availableVehiclesList', this.value)"
+          aria-label="Search Available Vehicles"
+        />
+        <table>
+          <thead>
+            <tr>
+              <th>Vehicle</th>
+              <th>Route</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="availableVehiclesList"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    });
+
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    function logout() {
+      auth.signOut().then(() => location = '../index.html');
+    }
+
+    auth.onAuthStateChanged(user => {
+      if (!user) return location = '../index.html';
+
+      db.ref(`users/${user.uid}/role`).once('value').then(snap => {
+        if (snap.val() !== 'driver') return logout();
+        loadDriverDashboard(user.uid);
+      });
+    });
+
+    function loadDriverDashboard(uid) {
+      const summary = document.getElementById('summary');
+      const completedSection = document.getElementById('completedSection');
+      const availableSection = document.getElementById('availableSection');
+
+      // 1. Fetch upcoming trips from main trips node (status != Completed)
+      db.ref('trips').orderByChild('driverUID').equalTo(uid).once('value').then(tripsSnap => {
+        let upcomingTrips = 0;
+        tripsSnap.forEach(ch => {
+          const t = ch.val();
+          if (t.status !== 'Completed') {
+            upcomingTrips++;
+          }
+        });
+
+        // 2. Fetch completed trips from separate driverCompletedTrips node
+        db.ref(`driverCompletedTrips/${uid}`).once('value').then(completedSnap => {
+          let completedTrips = 0;
+          const completedTripsData = [];
+          const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+          completedSnap.forEach(ch => {
+            const t = ch.val();
+            const tripDate = new Date(t.date).getTime();
+            if (tripDate >= weekAgo) { // completed this week only
+              completedTrips++;
+              completedTripsData.push({ id: ch.key, ...t });
+            }
+          });
+
+          // 3. Fetch available vehicles
+          db.ref('vehicles').once('value').then(vehiclesSnap => {
+            let availableVehiclesCount = 0;
+            const availableVehiclesData = [];
+
+            vehiclesSnap.forEach(ch => {
+              const v = ch.val();
+              if (v.status === 'Available') {
+                availableVehiclesCount++;
+                availableVehiclesData.push(v);
+              }
+            });
+
+            // Render summary cards
+            summary.innerHTML = `
+              <div class="card" id="cardUpcomingTrips">
+                <h3>${upcomingTrips}</h3>
+                <p>Upcoming Trips</p>
+              </div>
+              <div class="card" id="cardCompletedTrips">
+                <h3>${completedTrips}</h3>
+                <p>Completed This Week</p>
+              </div>
+              <div class="card" id="cardAvailableVehicles">
+                <h3>${availableVehiclesCount}</h3>
+                <p>Available Vehicles</p>
+              </div>
+            `;
+
+            // Render completed trips table with checkboxes
+            if (completedTripsData.length === 0) {
+              completedSection.style.display = 'none';
+            } else {
+              completedSection.style.display = 'block';
+              const tbodyCompleted = document.getElementById('completedTripsList');
+              tbodyCompleted.innerHTML = completedTripsData.map(trip => `
+                <tr>
+                  <td><input type="checkbox" class="completedCheckbox" data-id="${trip.id}" onchange="toggleRemoveSelectedButton()"></td>
+                  <td>${trip.id}</td>
+                  <td>${trip.route || ''}</td>
+                  <td>${trip.date || ''}</td>
+                  <td>${trip.status || ''}</td>
+                </tr>
+              `).join('');
+              toggleRemoveSelectedButton();
+            }
+
+            // Render available vehicles table
+            if (availableVehiclesData.length === 0) {
+              availableSection.style.display = 'none';
+            } else {
+              availableSection.style.display = 'block';
+              const tbodyAvailable = document.getElementById('availableVehiclesList');
+              tbodyAvailable.innerHTML = availableVehiclesData.map(vehicle => `
+                <tr>
+                  <td>${vehicle.vehicle || ''}</td>
+                  <td>${vehicle.route || ''}</td>
+                  <td>${vehicle.status || ''}</td>
+                </tr>
+              `).join('');
+            }
+
+            // Click handlers for summary cards
+            document.getElementById('cardUpcomingTrips').onclick = () => {
+              location.href = 'trip.html';
+            };
+          });
+        });
+      });
+    }
+
+    function filterTable(tbodyId, searchValue) {
+      const filter = searchValue.toLowerCase();
+      const tbody = document.getElementById(tbodyId);
+      const rows = tbody.getElementsByTagName('tr');
+      for (let i = 0; i < rows.length; i++) {
+        const rowText = rows[i].textContent.toLowerCase();
+        rows[i].style.display = rowText.includes(filter) ? '' : 'none';
+      }
+    }
+
+    // Enable or disable Remove Selected button based on checked checkboxes
+    function toggleRemoveSelectedButton() {
+      const checkboxes = document.querySelectorAll('.completedCheckbox');
+      const removeBtn = document.getElementById('removeSelectedBtn');
+      const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+      removeBtn.disabled = !anyChecked;
+    }
+
+    // Remove selected completed trips from the driverCompletedTrips node
+    function removeSelectedCompleted() {
+      const checkboxes = document.querySelectorAll('.completedCheckbox:checked');
+      if (checkboxes.length === 0) return alert('No trips selected.');
+
+      if (!confirm(`Remove ${checkboxes.length} selected trip(s)? This action cannot be undone.`)) return;
+
+      const promises = [];
+      const user = firebase.auth().currentUser;
+      checkboxes.forEach(cb => {
+        const tripId = cb.getAttribute('data-id');
+        promises.push(db.ref(`driverCompletedTrips/${user.uid}/${tripId}`).remove());
+      });
+
+      Promise.all(promises)
+        .then(() => {
+          alert('Selected trips removed.');
+          loadDriverDashboard(user.uid);
+        })
+        .catch(e => alert(e.message));
+    }
+  </script>
+</body>
+</html>
