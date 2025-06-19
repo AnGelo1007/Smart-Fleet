@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Driver Reports</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .table-container {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .form-grid label {
+      margin-top: 10px;
+    }
+    .remove-btn {
+      background: #e53935;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.2s ease;
+    }
+    .remove-btn:hover {
+      background: #ab000d;
+    }
+    /* Header buttons styling */
+    .header-buttons {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .header-buttons button {
+      cursor: pointer;
+      background-color: #fff;
+      border: none;
+      color: #2684f3;
+      padding: 8px 20px;
+      font-weight: 600;
+      border-radius: 20px;
+      transition: background-color 0.2s, color 0.2s;
+      box-shadow: 0 2px 6px rgb(33 150 243 / 0.2);
+      font-size: 1rem;
+    }
+    .header-buttons button:hover {
+      background-color: #2684f3;
+      color: white;
+    }
+  </style>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <header class="header" style="display:flex; justify-content: space-between; align-items: center;">
+    <h1>SMART FLEET</h1>
+    <div class="header-buttons">
+      <button onclick="goToDashboard()">Go to Dashboard</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </header>
+  <div class="container">
+    <nav class="sidebar">
+      <a href="trip.html">Trips</a>
+      <a href="reports.html" class="active">Reports</a>
+    </nav>
+    <section class="content">
+      <h2>Report Vehicle Usage & Issues</h2>
+      <form class="form-grid" onsubmit="submitReport(); return false;">
+        <label for="vehicle">Vehicle</label>
+        <select id="vehicle" required></select>
+        <label for="date">Date</label>
+        <input id="date" type="date" required value="" />
+        <label for="mileageFrom">Mileage From</label>
+        <input
+          id="mileageFrom"
+          type="number"
+          min="0"
+          required
+          placeholder="e.g., 10234"
+        />
+        <label for="mileageTo">Mileage To</label>
+        <input
+          id="mileageTo"
+          type="number"
+          min="0"
+          required
+          placeholder="e.g., 10350"
+        />
+        <label for="type">Maintenance Type</label>
+        <select id="type" required>
+          <option value="">-- Select Type --</option>
+          <option>General Usage</option>
+          <option>Oil Change</option>
+          <option>Tire Rotation</option>
+          <option>Brake Inspection</option>
+          <option>Engine Diagnostic</option>
+          <option>Transmission Service</option>
+          <option>Battery Check</option>
+          <option>Fluid Top-up</option>
+          <option>Filter Replacement</option>
+          <option>Wheel Alignment</option>
+          <option>Safety Inspection</option>
+          <option>Electrical System Check</option>
+          <option>Air Conditioning Service</option>
+          <option>Cleaning & Detailing</option>
+          <option>Other</option>
+        </select>
+        <label for="desc">Description / Issues (optional)</label>
+        <input
+          id="desc"
+          maxlength="200"
+          placeholder="Describe any issues with the vehicle…"
+        />
+        <div class="form-footer">
+          <button class="primary">Submit Report</button>
+        </div>
+      </form>
+      <br />
+      <h2>Submitted Reports</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Vehicle</th>
+              <th>Mileage From</th>
+              <th>Mileage To</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="reportList"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Firebase initialization
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    // Helper: Today's date as YYYY-MM-DD
+    function todayStr() {
+      return new Date().toISOString().slice(0, 10);
+    }
+    document.getElementById("date").value = todayStr();
+
+    // Globals
+    let currentUser = null;
+    let currentName = "";
+
+    // Audit Trail logger helper
+    function logUserAction(user, action) {
+      const timestamp = new Date().toISOString();
+      db.ref("auditTrail").push({ timestamp, user, action });
+    }
+
+    // Auth state change
+    auth.onAuthStateChanged((user) => {
+      if (!user) return (location = "../index.html");
+      currentUser = user;
+      db.ref("users/" + user.uid)
+        .get()
+        .then((snap) => {
+          const userData = snap.val();
+          if (!userData || userData.role !== "driver") {
+            auth.signOut().then(() => (location = "../index.html"));
+          } else {
+            currentName = userData.name || userData.username || user.email;
+            loadVehicles(user.uid);
+            loadReports();
+            logUserAction(currentName, "Logged in");
+          }
+        });
+    });
+
+    function logout() {
+      if (!currentUser) {
+        auth.signOut().then(() => (location = "../index.html"));
+        return;
+      }
+      db.ref("users/" + currentUser.uid)
+        .get()
+        .then((snap) => {
+          const username = snap.val().name || snap.val().username || "Unknown User";
+          logUserAction(username, "Logged out");
+          auth.signOut().then(() => (location = "../index.html"));
+        });
+    }
+
+    // Load vehicles assigned to this driver (by trips, fallback to all vehicles)
+    function loadVehicles(uid) {
+      db.ref("trips")
+        .orderByChild("driverUID")
+        .equalTo(uid)
+        .once("value")
+        .then((snap) => {
+          let vehicles = new Set();
+          snap.forEach((trip) => {
+            const routeLabel = trip.val().route || "";
+            const veh = routeLabel.split("•")[0]?.trim();
+            if (veh) vehicles.add(routeLabel);
+          });
+          if (vehicles.size === 0) {
+            db.ref("vehicles")
+              .once("value")
+              .then((vSnap) => {
+                vSnap.forEach((v) => {
+                  const vData = v.val();
+                  vehicles.add(`${vData.vehicle} • ${vData.route}`);
+                });
+                populateVehicleDropdown([...vehicles]);
+              });
+          } else {
+            populateVehicleDropdown([...vehicles]);
+          }
+        });
+    }
+    function populateVehicleDropdown(arr) {
+      const sel = document.getElementById("vehicle");
+      sel.innerHTML = "";
+      arr.forEach((label) => {
+        const opt = document.createElement("option");
+        opt.value = label;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      });
+    }
+
+    // Submit report: SAVE TO driverReports, NOT maintenance
+    function submitReport() {
+      const veh = document.getElementById("vehicle").value;
+      const date = document.getElementById("date").value;
+      const mileageFrom = document.getElementById("mileageFrom").value;
+      const mileageTo = document.getElementById("mileageTo").value;
+      const type = document.getElementById("type").value;
+      const desc = document.getElementById("desc").value.trim();
+      if (!veh || !date || !mileageFrom || !mileageTo || !type) {
+        alert("All fields except Description are required.");
+        return;
+      }
+      if (+mileageTo < +mileageFrom) {
+        alert("Mileage To must be greater than or equal to Mileage From.");
+        return;
+      }
+      // Send only to driverReports node with status "Pending"
+      db.ref("driverReports")
+        .push({
+          username: currentName,
+          vehicle: veh,
+          date: date,
+          mileageFrom: mileageFrom,
+          mileageTo: mileageTo,
+          desc: desc,
+          status: "Pending",
+          type: type,
+        })
+        .then(() => {
+          alert("Report submitted and sent for admin review.");
+          document.querySelector("form").reset();
+          document.getElementById("date").value = todayStr();
+          loadReports();
+          logUserAction(currentName, `Submitted report for ${veh} on ${date}`);
+        })
+        .catch((e) => alert(e.message));
+    }
+
+    // Remove report by key and log action
+    function removeReport(reportId, vehicle, date) {
+      if (!confirm("Are you sure you want to remove this report?")) return;
+      db.ref("driverReports/" + reportId)
+        .remove()
+        .then(() => {
+          alert("Report removed.");
+          logUserAction(currentName, `Removed report for ${vehicle} on ${date}`);
+          loadReports();
+        })
+        .catch((e) => alert("Failed to remove report: " + e.message));
+    }
+
+    // Load only reports submitted by this driver (from driverReports node)
+    function loadReports() {
+      db.ref("driverReports")
+        .orderByChild("username")
+        .equalTo(currentName)
+        .on("value", (snap) => {
+          let out = "";
+          snap.forEach((c) => {
+            const m = c.val();
+            const key = c.key;
+            out += `<tr>
+              <td>${m.date || ""}</td>
+              <td>${m.vehicle || ""}</td>
+              <td>${m.mileageFrom || ""}</td>
+              <td>${m.mileageTo || ""}</td>
+              <td>${m.type || ""}</td>
+              <td>${m.desc || ""}</td>
+              <td>${m.status || ""}</td>
+              <td>
+                <button class="remove-btn" onclick="removeReport('${key}', '${m.vehicle}', '${m.date}')">Remove</button>
+              </td>
+            </tr>`;
+          });
+          document.getElementById("reportList").innerHTML = out;
+        });
+    }
+
+    // Navigate back to Dashboard based on role
+    function goToDashboard() {
+      const user = firebase.auth().currentUser;
+      if (!user) return location = '../index.html';
+      firebase.database().ref('users/' + user.uid + '/role').once('value')
+        .then(snap => {
+          const role = snap.val();
+          if (role === 'admin')       location = 'a-dashboard.html';
+          else if (role === 'driver') location = 'd-dashboard.html';
+          else if (role === 'maintenance') location = 'm-dashboard.html';
+          else location = '../index.html';
+        });
+    }
+  </script>
+</body>
+</html>

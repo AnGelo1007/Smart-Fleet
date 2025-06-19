@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Maintenance & Performance Report | SMART FLEET</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #fff;
+      padding: 20px 40px;
+      color: #222;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #2684f3;
+      font-weight: 700;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      font-size: 2rem;
+    }
+    h2 {
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
+      border-bottom: 2px solid #2684f3;
+      padding-bottom: 0.3rem;
+    }
+    .checkbox-group {
+      margin: 15px 0 20px 0;
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      font-weight: 600;
+      user-select: none;
+    }
+    .checkbox-group label {
+      cursor: pointer;
+      font-size: 1.1rem;
+    }
+    .summary-cards {
+      display: flex;
+      gap: 1.2rem;
+      margin-bottom: 1.8rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .card {
+      background: #e6f2fa;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px #0001;
+      padding: 1rem 1.2rem;
+      text-align: center;
+      min-width: 160px;
+      border: 2px solid #2196f3;
+      font-weight: 600;
+      font-size: 1.2rem;
+      color: #0a3d62;
+    }
+    .card p {
+      margin: 0.4rem 0 0 0;
+      font-weight: 400;
+      font-size: 0.9rem;
+      color: #555;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+      margin-bottom: 30px;
+      box-shadow: 0 0 8px #ddd;
+    }
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #f4f8fa;
+      color: #333;
+      font-weight: 700;
+    }
+    tr:nth-child(even) {
+      background-color: #f9fbfc;
+    }
+    #printBtn, #backBtn {
+      background-color: #2684f3;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 18px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin: 10px 10px 30px 10px;
+      transition: background-color 0.2s ease;
+    }
+    #printBtn:hover, #backBtn:hover {
+      background-color: #0d5bbf;
+    }
+    #backBtn {
+      float: left;
+    }
+    /* Hide back button and checkboxes when printing */
+    @media print {
+      #printBtn, #backBtn, .checkbox-group, .filter-group {
+        display: none;
+      }
+      body {
+        padding: 0 10px;
+        color: #000;
+      }
+      .summary-cards {
+        page-break-after: avoid;
+      }
+      table {
+        page-break-inside: auto;
+      }
+      tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+      }
+    }
+    /* Hide sections when not selected */
+    .hidden {
+      display: none !important;
+    }
+    .filter-group {
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      font-weight: 600;
+    }
+    .filter-group label {
+      font-weight: 500;
+      font-size: 1rem;
+      user-select: none;
+    }
+    .filter-group select {
+      font-size: 1rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1.5px solid #ccc;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+    .filter-group select:focus {
+      border-color: #2684f3;
+      box-shadow: 0 0 5px #2684f3;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+
+  <h1>Maintenance & Performance Report</h1>
+
+  <div class="checkbox-group" aria-label="Select report sections to print">
+    <label><input type="checkbox" id="chkMaintenance" checked> Maintenance Report</label>
+    <label><input type="checkbox" id="chkTechnician" checked> Technician Performance</label>
+    <label><input type="checkbox" id="chkDriver" checked> Driver Performance</label>
+  </div>
+
+  <button id="backBtn" onclick="goBack()">← Back to Dashboard</button>
+  <button id="printBtn" onclick="printSelected()">Print Selected</button>
+
+  <!-- Maintenance Report Section -->
+  <section id="sectionMaintenance">
+    <h2>Maintenance Report</h2>
+    <div class="summary-cards" id="summaryMaintenance"></div>
+    <table id="tableMaintenance">
+      <thead>
+        <tr>
+          <th>ID</th><th>Technician</th><th>Vehicle</th><th>Type</th><th>Description</th><th>Status</th><th>Date</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- Technician Performance Section -->
+  <section id="sectionTechnician">
+    <h2>Technician Performance</h2>
+    <div class="filter-group">
+      <label for="selectTechnician">Select Technician:</label>
+      <select id="selectTechnician">
+        <option value="all">All Technicians</option>
+      </select>
+    </div>
+    <table id="tableTechnician">
+      <thead>
+        <tr>
+          <th>Technician</th><th>Total Tasks</th><th>Completed</th><th>In Progress</th><th>Pending</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- Driver Performance Section -->
+  <section id="sectionDriver">
+    <h2>Driver Performance</h2>
+    <div class="filter-group">
+      <label for="selectDriver">Select Driver:</label>
+      <select id="selectDriver">
+        <option value="all">All Drivers</option>
+      </select>
+    </div>
+    <table id="tableDriver">
+      <thead>
+        <tr>
+          <th>Driver</th><th>Total Trips</th><th>Completed Trips</th><th>Pending Trips</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <script>
+    // Firebase config and init
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPcWRYunMewJ6rNik8dGpiuIJlDUCW8rE",
+      authDomain: "smart-fleet-system-79d51.firebaseapp.com",
+      databaseURL: "https://smart-fleet-system-79d51-default-rtdb.firebaseio.com",
+      projectId: "smart-fleet-system-79d51",
+      storageBucket: "smart-fleet-system-79d51.appspot.com",
+      messagingSenderId: "803202982073",
+      appId: "1:803202982073:web:a713a86abec662f02fbb68",
+      measurementId: "G-KXXC578RJQ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const summaryMaintenance = document.getElementById('summaryMaintenance');
+    const tableMaintenanceBody = document.querySelector('#tableMaintenance tbody');
+
+    const tableTechnicianBody = document.querySelector('#tableTechnician tbody');
+    const selectTechnician = document.getElementById('selectTechnician');
+
+    const tableDriverBody = document.querySelector('#tableDriver tbody');
+    const selectDriver = document.getElementById('selectDriver');
+
+    const chkMaintenance = document.getElementById('chkMaintenance');
+    const chkTechnician = document.getElementById('chkTechnician');
+    const chkDriver = document.getElementById('chkDriver');
+
+    // Format ISO date to locale date string
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      if (isNaN(d)) return dateStr;
+      return d.toLocaleDateString();
+    }
+
+    // Create summary card
+    function createCard(title, value) {
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.innerHTML = `<h3>${value}</h3><p>${title}</p>`;
+      return div;
+    }
+
+    // Data holders
+    let maintenanceData = {};
+    let technicianStats = {};
+    let driverStats = {};
+    let tripsData = {};
+
+    // Load all data & render report
+    async function loadReportData() {
+      // Fetch maintenance
+      const maintenanceSnap = await db.ref('maintenance').once('value');
+      maintenanceData = maintenanceSnap.val() || {};
+
+      // Fetch trips
+      const tripsSnap = await db.ref('trips').once('value');
+      tripsData = tripsSnap.val() || {};
+
+      // Clear old data
+      summaryMaintenance.innerHTML = '';
+      tableMaintenanceBody.innerHTML = '';
+      tableTechnicianBody.innerHTML = '';
+      tableDriverBody.innerHTML = '';
+      selectTechnician.innerHTML = '<option value="all">All Technicians</option>';
+      selectDriver.innerHTML = '<option value="all">All Drivers</option>';
+
+      // Initialize analytics
+      let totalMaintenance = 0,
+          completedMaintenance = 0,
+          inProgressMaintenance = 0,
+          pendingMaintenance = 0;
+
+      technicianStats = {};
+      driverStats = {};
+
+      // Process maintenance data
+      Object.entries(maintenanceData).forEach(([id, m]) => {
+        totalMaintenance++;
+        const status = (m.status || '').toLowerCase();
+
+        if (status === 'completed') completedMaintenance++;
+        else if (status === 'in progress') inProgressMaintenance++;
+        else if (['pending', 'assigned', 'scheduled'].includes(status)) pendingMaintenance++;
+
+        // Maintenance table row
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${id}</td>
+          <td>${m.username || ''}</td>
+          <td>${m.vehicle || ''}</td>
+          <td>${m.type || ''}</td>
+          <td>${m.desc || ''}</td>
+          <td>${m.status || ''}</td>
+          <td>${formatDate(m.date)}</td>
+        `;
+        tableMaintenanceBody.appendChild(tr);
+
+        // Accumulate technician stats
+        if (m.username) {
+          if (!technicianStats[m.username]) {
+            technicianStats[m.username] = { total: 0, completed: 0, inProgress: 0, pending: 0 };
+          }
+          technicianStats[m.username].total++;
+          if (status === 'completed') technicianStats[m.username].completed++;
+          else if (status === 'in progress') technicianStats[m.username].inProgress++;
+          else if (['pending', 'assigned', 'scheduled'].includes(status)) technicianStats[m.username].pending++;
+        }
+      });
+
+      // Process trips data for driver performance
+      Object.entries(tripsData).forEach(([id, t]) => {
+        const driver = t.driverName || t.username || t.driver || '';
+        if (!driver) return;
+
+        if (!driverStats[driver]) {
+          driverStats[driver] = { totalTrips: 0, completedTrips: 0, pendingTrips: 0 };
+        }
+        driverStats[driver].totalTrips++;
+
+        const status = (t.status || '').toLowerCase();
+        if (status === 'completed') driverStats[driver].completedTrips++;
+        else if (['pending', 'assigned', 'scheduled', 'in progress'].includes(status)) driverStats[driver].pendingTrips++;
+      });
+
+      // Render summary cards
+      summaryMaintenance.appendChild(createCard('Total Maintenance Tasks', totalMaintenance));
+      summaryMaintenance.appendChild(createCard('Completed', completedMaintenance));
+      summaryMaintenance.appendChild(createCard('In Progress', inProgressMaintenance));
+      summaryMaintenance.appendChild(createCard('Pending / Assigned', pendingMaintenance));
+
+      // Populate technician dropdown
+      Object.keys(technicianStats).sort().forEach(tech => {
+        const option = document.createElement('option');
+        option.value = tech;
+        option.textContent = tech;
+        selectTechnician.appendChild(option);
+      });
+      renderTechnicianTable(); // initial render all
+
+      // Populate driver dropdown
+      Object.keys(driverStats).sort().forEach(driver => {
+        const option = document.createElement('option');
+        option.value = driver;
+        option.textContent = driver;
+        selectDriver.appendChild(option);
+      });
+      renderDriverTable(); // initial render all
+    }
+
+    // Render filtered technician table
+    function renderTechnicianTable() {
+      const selected = selectTechnician.value;
+      tableTechnicianBody.innerHTML = '';
+
+      const filtered = selected === 'all'
+        ? Object.entries(technicianStats)
+        : Object.entries(technicianStats).filter(([tech]) => tech === selected);
+
+      filtered.forEach(([tech, stats]) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${tech}</td>
+          <td>${stats.total}</td>
+          <td>${stats.completed}</td>
+          <td>${stats.inProgress}</td>
+          <td>${stats.pending}</td>
+        `;
+        tableTechnicianBody.appendChild(tr);
+      });
+
+      if (filtered.length === 0) {
+        tableTechnicianBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No data available.</td></tr>';
+      }
+    }
+
+    // Render filtered driver table
+    function renderDriverTable() {
+      const selected = selectDriver.value;
+      tableDriverBody.innerHTML = '';
+
+      const filtered = selected === 'all'
+        ? Object.entries(driverStats)
+        : Object.entries(driverStats).filter(([driver]) => driver === selected);
+
+      filtered.forEach(([driver, stats]) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${driver}</td>
+          <td>${stats.totalTrips}</td>
+          <td>${stats.completedTrips}</td>
+          <td>${stats.pendingTrips}</td>
+        `;
+        tableDriverBody.appendChild(tr);
+      });
+
+      if (filtered.length === 0) {
+        tableDriverBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No data available.</td></tr>';
+      }
+    }
+
+    // Print only selected sections
+    function printSelected() {
+      const maintenanceSection = document.getElementById('sectionMaintenance');
+      const technicianSection = document.getElementById('sectionTechnician');
+      const driverSection = document.getElementById('sectionDriver');
+
+      maintenanceSection.classList.toggle('hidden', !chkMaintenance.checked);
+      technicianSection.classList.toggle('hidden', !chkTechnician.checked);
+      driverSection.classList.toggle('hidden', !chkDriver.checked);
+
+      window.print();
+
+      // After print, show all sections again for user convenience
+      maintenanceSection.classList.remove('hidden');
+      technicianSection.classList.remove('hidden');
+      driverSection.classList.remove('hidden');
+    }
+
+    // Go back to admin dashboard (adjust URL as needed)
+    function goBack() {
+      window.location.href = 'a-dashboard.html';
+    }
+
+    // Event listeners for dropdown filters
+    selectTechnician.addEventListener('change', renderTechnicianTable);
+    selectDriver.addEventListener('change', renderDriverTable);
+
+    // Load data on page load
+    window.onload = loadReportData;
+  </script>
+</body>
+</html>
